@@ -1,73 +1,62 @@
 // src/hooks/useMediaPipeFaceMesh.jsx
 import { useEffect, useRef } from "react";
-import * as mp from "@mediapipe/face_mesh";
-import { Camera } from "@mediapipe/camera_utils";
+import * as faceMesh from "@mediapipe/face_mesh";
+import * as drawingUtils from "@mediapipe/drawing_utils";
 
-// Optional: basic expression estimation (smile, neutral)
-function estimateEmotion(landmarks) {
-  if (!landmarks || landmarks.length === 0) return "no-face";
-
-  const leftMouth = landmarks[61];
-  const rightMouth = landmarks[291];
-  const topMouth = landmarks[13];
-  const bottomMouth = landmarks[14];
-
-  const mouthWidth = Math.abs(rightMouth.x - leftMouth.x);
-  const mouthHeight = Math.abs(bottomMouth.y - topMouth.y);
-
-  if (mouthHeight / mouthWidth > 0.4) return "surprised";
-  if (mouthHeight / mouthWidth > 0.25) return "smiling";
-  return "neutral";
-}
-
-export default function useMediaPipeFaceMesh(handleBehavior) {
+export default function useMediaPipeFaceMesh(onData) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
 
   useEffect(() => {
-    const faceMesh = new mp.FaceMesh({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+    if (typeof window === "undefined") return;
+
+    let camera = null;
+
+    const faceMeshInstance = new faceMesh.FaceMesh({
+      locateFile: (file) =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
     });
 
-    faceMesh.setOptions({
+    faceMeshInstance.setOptions({
       maxNumFaces: 1,
       refineLandmarks: true,
       minDetectionConfidence: 0.5,
       minTrackingConfidence: 0.5,
     });
 
-    faceMesh.onResults(async (results) => {
-      const landmarks = results.multiFaceLandmarks?.[0] || [];
-      const emotion = estimateEmotion(landmarks);
-      if (handleBehavior) {
-        await handleBehavior(landmarks, emotion);
-      }
+    faceMeshInstance.onResults((results) => {
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext("2d");
+      if (!ctx) return;
 
-      // Optional: draw for debugging
-      const canvasCtx = canvasRef.current?.getContext("2d");
-      if (canvasCtx && results.image) {
-        canvasCtx.save();
-        canvasCtx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-        canvasCtx.drawImage(results.image, 0, 0, canvasRef.current.width, canvasRef.current.height);
-        canvasCtx.restore();
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (results.multiFaceLandmarks.length > 0) {
+        drawingUtils.drawConnectors(ctx, results.multiFaceLandmarks[0], faceMesh.FACEMESH_TESSELATION,
+          { color: "#C0C0C070", lineWidth: 1 });
+        onData(results.multiFaceLandmarks[0]);
       }
     });
 
-    if (
-      typeof window !== "undefined" &&
-      videoRef.current &&
-      canvasRef.current
-    ) {
-      const camera = new Camera(videoRef.current, {
+    async function loadCamera() {
+      const { Camera } = await import("@mediapipe/camera_utils");
+      camera = new Camera(videoRef.current, {
         onFrame: async () => {
-          await faceMesh.send({ image: videoRef.current });
+          await faceMeshInstance.send({ image: videoRef.current });
         },
         width: 640,
         height: 480,
       });
       camera.start();
     }
-  }, [handleBehavior]);
+
+    loadCamera();
+
+    return () => {
+      if (camera && camera.stop) camera.stop();
+    };
+  }, [onData]);
 
   return { videoRef, canvasRef };
 }
