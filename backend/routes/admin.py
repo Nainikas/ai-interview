@@ -6,12 +6,12 @@ import sqlalchemy
 router = APIRouter()
 
 # 1) List all sessions (latest timestamp per candidate)
-@router.get("/admin/interview-sessions")
+@router.get("/interview-sessions")
 async def get_sessions():
     q = (
         sqlalchemy.select(
             interview_logs.c.candidate_id,
-            sqlalchemy.func.max(interview_logs.c.timestamp).label("created_at")
+            sqlalchemy.func.max(interview_logs.c.timestamp).label("created_at"),
         )
         .group_by(interview_logs.c.candidate_id)
         .order_by(sqlalchemy.func.max(interview_logs.c.timestamp).desc())
@@ -21,7 +21,7 @@ async def get_sessions():
         "sessions": [
             {
                 "id": r["candidate_id"],
-                "candidate_name": r["candidate_id"],  # swap in real name later
+                "candidate_name": r["candidate_id"],  # replace with real name once available
                 "created_at": r["created_at"],
             }
             for r in rows
@@ -29,7 +29,7 @@ async def get_sessions():
     }
 
 # 2) Q&A log (only scored answers)
-@router.get("/admin/qa-log")
+@router.get("/qa-log")
 async def get_qa_log(candidate_id: str = Query(...)):
     q = (
         interview_logs.select()
@@ -53,12 +53,12 @@ async def get_qa_log(candidate_id: str = Query(...)):
         ]
     }
 
-# 3) Behavior logs
-@router.get("/admin/behavior-logs")
+# 3) Behavior logs (filter on session_id, not the non‐existent candidate_id)
+@router.get("/behavior-logs")
 async def get_behavior_logs(candidate_id: str = Query(...)):
     q = (
         behavior_logs.select()
-        .where(behavior_logs.c.candidate_id == candidate_id)
+        .where(behavior_logs.c.session_id == candidate_id)
         .order_by(behavior_logs.c.timestamp.asc())
     )
     rows = await database.fetch_all(q)
