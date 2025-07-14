@@ -1,58 +1,54 @@
 # backend/agent.py
 
 import os
-from langchain_community.llms import OpenAI
-from langchain.agents import initialize_agent, Tool   # agent API stays in core for now
-from rag import get_retriever
-from scoring import adaptive_score, check_hallucination
-from behavior_logs import get_recent as fetch_engagement
 from typing import List
 
-# 1) Initialize the LLM
-llm = OpenAI(temperature=0.7)
+from langchain.agents import initialize_agent, Tool
+from langchain.memory import ConversationBufferMemory
+from langchain_openai import ChatOpenAI
+from langchain.agents.agent_types import AgentType
+from rag import get_retriever
+from scoring import adaptive_score, score_answer
+from behavior_logs import get_recent as fetch_engagement
 
-# 2) Retrieval tool
-def resume_retriever(query: str):
-    retriever = get_retriever(k=3)
-    docs = retriever.get_relevant_documents(query)
-    # return just the text for simplicity
-    return [d.page_content for d in docs]
+# ─── 1) LLM Setup ─────────────────────────────────────────────
+llm = ChatOpenAI(temperature=0.7, model="gpt-4o")
 
-# 3) Scoring tool
-def score_answer(answer: str):
-    score = adaptive_score(answer)
-    halluc = check_hallucination(answer)
-    return {"score": score, "hallucination": halluc}
+# ─── 2) Memory for Personalization ────────────────────────────
+memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-# 4) Define Tools
-tools = [
-    Tool(
+# ─── 3) Resume Retrieval Tool ─────────────────────────────────
+def make_resume_tool(candidate_id: str):
+    retriever = get_retriever(candidate_id)
+    def fetch(query: str):
+        docs = retriever.get_relevant_documents(query)
+        return "\n".join(d.page_content for d in docs)
+    return Tool(
         name="ResumeRetriever",
-        func=resume_retriever,
-        description="Fetches the top 3 relevant resume snippets for a query."
-    ),
-    Tool(
-        name="ScoreAnswer",
-        func=score_answer,
-        description="Computes the candidate’s score and checks for hallucinations."
+        func=fetch,
+        description="Useful for pulling relevant experience or keywords from the candidate's resume."
     )
-]
 
-# 5) Initialize the conversational agent
-agent = initialize_agent(
-    tools,
-    llm,
-    agent="conversational-react-description",
-    verbose=True
-)
+# ─── 4) Agent Initialization Function ─────────────────────────
+def build_interview_agent(candidate_id: str):
+    resume_tool = make_resume_tool(candidate_id)
 
-# 6) Tone computation helper
+    return initialize_agent(
+        tools=[resume_tool],
+        llm=llm,
+        agent=AgentType.CONVERSATIONAL_REACT_DESCRIPTION,
+        memory=memory,
+        verbose=True
+    )
+
+# ─── 5) Adaptive Tone Computation ─────────────────────────────
 async def compute_tone(session_id: str, limit: int = 3) -> str:
-    """
-    Fetch the last `limit` engagement scores and map to a tone.
-    """
     scores: List[float] = await fetch_engagement(session_id, limit)
     if not scores:
         return "neutral"
     avg = sum(scores) / len(scores)
-    return "confident" if avg > 0.8 else "hesitant"
+    return (
+        "confident" if avg > 0.85 else
+        "hesitant"  if avg > 0.5 else
+        "nervous"
+    )

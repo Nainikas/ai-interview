@@ -1,71 +1,106 @@
+// src/components/AdminLogin.jsx
 import React, { useState } from "react";
 
 export default function AdminLogin({ onLogin }) {
-  const [pw, setPw] = useState("");
-  const [error, setError] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
-  const SECRET = import.meta.env.VITE_SECRET_PASSWORD;
-
-  function handleSubmit(e) {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    // Change this password for demo!
-    if (pw === SECRET) {
-      onLogin();
-      setPw("");
-      setError("");
-    } else {
-      setError("Incorrect password. Try again.");
-      setPw("");
+
+    if (!password) {
+      setError("Please enter a password.");
+      return;
     }
-  }
+
+    setSubmitting(true);
+    setError(null);
+
+    // You can later replace this with API auth if needed
+    const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD;
+
+    if (password === ADMIN_PASSWORD) {
+      onLogin();
+    } else {
+      setError("Incorrect password.");
+    }
+
+    setSubmitting(false);
+  };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      style={{
-        maxWidth: 320,
-        margin: "120px auto",
-        background: "#222",
-        color: "#fff",
-        padding: 32,
-        borderRadius: 10,
-        boxShadow: "0 4px 18px #2224"
-      }}
-    >
-      <h2>Admin Login</h2>
-      <input
-        type="password"
-        placeholder="Admin password"
-        value={pw}
-        onChange={e => setPw(e.target.value)}
-        style={{
-          width: "100%",
-          padding: "10px",
-          margin: "18px 0",
-          borderRadius: 5,
-          border: "1px solid #555",
-          fontSize: 18,
-        }}
-      />
-      <button
-        type="submit"
-        style={{
-          width: "100%",
-          padding: "10px",
-          borderRadius: 6,
-          border: "none",
-          background: "#007bff",
-          color: "#fff",
-          fontWeight: 600,
-          fontSize: 16,
-          cursor: "pointer"
-        }}
-      >
-        Login
-      </button>
-      {error && (
-        <div style={{ marginTop: 12, color: "#ff5555" }}>{error}</div>
-      )}
-    </form>
+    <div style={styles.container}>
+      <form onSubmit={handleSubmit} style={styles.card}>
+        <h1 style={styles.heading}>🔒 Admin Login</h1>
+        <p style={styles.subheading}>Please enter the admin password to continue.</p>
+
+        <input
+          type="password"
+          placeholder="Admin Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          style={styles.input}
+        />
+
+        <button type="submit" style={styles.button} disabled={submitting}>
+          {submitting ? "Logging in…" : "Login"}
+        </button>
+
+        {error && <p style={styles.error}>{error}</p>}
+      </form>
+    </div>
   );
 }
+
+const styles = {
+  container: {
+    minHeight: "100vh",
+    background: "#f2f2f2",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: "2rem",
+  },
+  card: {
+    background: "#fff",
+    padding: "2rem 3rem",
+    borderRadius: 12,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
+    textAlign: "center",
+    maxWidth: 400,
+    width: "100%",
+  },
+  heading: {
+    fontSize: "1.8rem",
+    marginBottom: "0.5rem",
+  },
+  subheading: {
+    color: "#666",
+    fontSize: "0.95rem",
+    marginBottom: "1.5rem",
+  },
+  input: {
+    width: "100%",
+    padding: "10px",
+    fontSize: "1rem",
+    marginBottom: "1rem",
+    borderRadius: 6,
+    border: "1px solid #ccc",
+  },
+  button: {
+    width: "100%",
+    padding: "10px",
+    fontSize: "1rem",
+    background: "#222",
+    color: "#fff",
+    border: "none",
+    borderRadius: 6,
+    cursor: "pointer",
+  },
+  error: {
+    marginTop: "1rem",
+    color: "#b00020",
+    fontWeight: "bold",
+  },
+};
