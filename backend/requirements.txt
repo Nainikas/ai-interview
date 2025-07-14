@@ -9,21 +9,22 @@ langchain==0.3.26
 langchain-openai==0.3.28
 langchain-core==0.3.68
 langchain-community==0.3.27
-langchain-chroma==0.0.24  
 
 # Chroma Vector DB
 chromadb==1.0.15
-chroma-hnswlib==0.7.3
+chroma-hnswlib==0.7.3  # Optional for ANN speedup
 
-# Numpy (compatible with all above)
+# Numpy
 numpy==1.26.4
 
-# Other dependencies
+# Pydantic & DB
 pydantic==2.11.7
 pydantic-settings==2.10.1
 databases==0.9.0
 sqlalchemy==2.0.41
 asyncpg==0.30.0
+
+# HTTP clients
 httpx==0.28.1
 requests==2.32.4
 python-multipart==0.0.9
@@ -47,5 +48,5 @@ rich==14.0.0
 pytest==8.4.1
 pytest-asyncio==1.0.0
 
-# Optional: Hugging Face, if needed
+# Optional: Hugging Face
 huggingface-hub==0.33.4
