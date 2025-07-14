@@ -1,7 +1,7 @@
 # backend/rag.py
 
 import os
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -38,6 +38,6 @@ async def ingest_resume(file_path: str, mime: str) -> int:
 
     # Add new chunks and persist
     db.add_documents(chunks)
-    db.persist()
+    #db.persist()
 
     return len(chunks)

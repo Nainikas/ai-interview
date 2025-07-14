@@ -1,4 +1,5 @@
 # backend/routes/admin.py
+
 from fastapi import APIRouter, Query, HTTPException
 from db import database, interview_logs, behavior_logs
 import sqlalchemy
@@ -11,7 +12,7 @@ async def get_sessions():
     q = (
         sqlalchemy.select(
             interview_logs.c.candidate_id,
-            sqlalchemy.func.max(interview_logs.c.timestamp).label("created_at"),
+            sqlalchemy.func.max(interview_logs.c.timestamp).label("created_at")
         )
         .group_by(interview_logs.c.candidate_id)
         .order_by(sqlalchemy.func.max(interview_logs.c.timestamp).desc())
@@ -21,7 +22,7 @@ async def get_sessions():
         "sessions": [
             {
                 "id": r["candidate_id"],
-                "candidate_name": r["candidate_id"],  # replace with real name once available
+                "candidate_name": r["candidate_id"],  # swap in real name later
                 "created_at": r["created_at"],
             }
             for r in rows
@@ -53,9 +54,10 @@ async def get_qa_log(candidate_id: str = Query(...)):
         ]
     }
 
-# 3) Behavior logs (filter on session_id, not the non‐existent candidate_id)
+# 3) Behavior logs
 @router.get("/behavior-logs")
 async def get_behavior_logs(candidate_id: str = Query(...)):
+    # note: behavior_logs table uses `session_id`
     q = (
         behavior_logs.select()
         .where(behavior_logs.c.session_id == candidate_id)
