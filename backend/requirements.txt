@@ -9,7 +9,7 @@ langchain==0.3.26
 langchain-openai==0.3.28
 langchain-core==0.3.68
 langchain-community==0.3.27
-langchain-chroma==0.0.24  # ✅ avoids numpy >=2.1 conflict
+langchain-chroma==0.0.24  
 
 # Chroma Vector DB
 chromadb==1.0.15
