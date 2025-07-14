@@ -8,7 +8,7 @@ openai==1.95.0
 langchain==0.3.26
 langchain-openai==0.3.28
 langchain-core==0.3.68
-langchain-community==0.3.26  # ✅ downgraded to avoid numpy>=2.1.0 issue
+langchain-community==0.3.26  
 langchain-chroma==0.0.24  
 
 # Chroma Vector DB
