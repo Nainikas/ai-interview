@@ -45,3 +45,4 @@ dist/
 # TTS & upload artefacts
 output_*.mp3
 temp_resume_*
+backend/chroma_db/*.bin
