@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: ai-interview-backend
+    env: python
+    region: oregon  
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host=0.0.0.0 --port=8000
+    pythonVersion: 3.12.3
+    autoDeploy: true
+    plan: free  # or starter/pro depending on usage
