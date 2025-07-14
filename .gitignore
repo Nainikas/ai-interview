@@ -34,3 +34,12 @@ htmlcov/
 
 # Uvicorn reloads
 *.pid
+
+# Node.js
+node_modules/
+# Vite / build
+dist/
+.vite/
+# TTS & upload artefacts
+output_*.mp3
+temp_resume_*
