@@ -136,7 +136,7 @@ This AI agent enhances hiring efficiency, fairness, and decision-making by combi
  `/ask`: <img width="1796" height="1004" alt="image" src="https://github.com/user-attachments/assets/656e924d-cfb6-426f-9054-ff152ca7b281" />
  `/feedback`: <img width="1848" height="995" alt="image" src="https://github.com/user-attachments/assets/54328e28-3c7f-445d-819d-ca29492bb377" />
  `/upload-resume : <img width="1847" height="917" alt="image" src="https://github.com/user-attachments/assets/b743fca0-fe32-47f3-9ad8-ac7c932bff72" />
-  `/log-behavior`: <img width="1839" height="929" alt="image" src="https://github.com/user-attachments/assets/9bd638a9-9e28-4169-b041-6fdccebdbbac" />
+  `/log-behavior`:  <img width="1839" height="929" alt="image" src="https://github.com/user-attachments/assets/9bd638a9-9e28-4169-b041-6fdccebdbbac" />
 
 
 
