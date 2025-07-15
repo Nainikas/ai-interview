@@ -109,7 +109,16 @@ export default function AdminDashboard({ onLogout }) {
                       <p><strong>Q:</strong> {q.question}</p>
                       <p><strong>A:</strong> {q.answer}</p>
                       <p><strong>Score:</strong> {q.score}</p>
+                      {q.subscores && (
+                        <ul style={{ marginLeft: "1rem", fontSize: "0.9rem" }}>
+                          <li>Relevance: {q.subscores.relevance}</li>
+                          <li>Accuracy: {q.subscores.accuracy}</li>
+                          <li>Completeness: {q.subscores.completeness}</li>
+                          <li>Clarity: {q.subscores.clarity}</li>
+                        </ul>
+                      )}
                       <p><strong>Hallucination:</strong> {q.hallucination}</p>
+
                     </div>
                   ))
                 )}
