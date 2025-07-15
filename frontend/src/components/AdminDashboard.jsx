@@ -4,40 +4,36 @@ import api from "../api";
 
 export default function AdminDashboard({ onLogout }) {
   const [sessions, setSessions] = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [expandedLogs, setExpandedLogs] = useState({});
+
+  const toggle = (id, type) => {
+    setExpandedLogs((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), [type]: !prev[id]?.[type] },
+    }));
+  };
 
   useEffect(() => {
     (async () => {
       try {
-        // 1️⃣ Fetch sessions
         const { sessions: sessionsData = [] } =
           await api.get("/admin/interview-sessions");
 
-        // 2️⃣ Enrich each session with QA + behavior logs
         const enriched = await Promise.all(
           sessionsData.map(async (s) => {
-            // Q&A — if no answers yet, server returns 404, so we catch it
             let qa = [];
             try {
-              const { qa_log = [] } = await api.get(
-                `/admin/qa-log?candidate_id=${s.id}`
-              );
+              const { qa_log = [] } = await api.get(`/admin/qa-log?candidate_id=${s.id}`);
               qa = qa_log;
             } catch (err) {
-              if (String(err).includes("404")) {
-                qa = [];
-              } else {
-                throw err;
-              }
+              if (!String(err).includes("404")) throw err;
             }
 
-            // Behavior logs — backend returns [] by default but we guard anyway
             let behavior = [];
             try {
-              const { logs = [] } = await api.get(
-                `/admin/behavior-logs?candidate_id=${s.id}`
-              );
+              const { logs = [] } = await api.get(`/admin/behavior-logs?candidate_id=${s.id}`);
               behavior = logs;
             } catch (err) {
               console.warn("Behavior logs error for", s.id, err);
@@ -51,7 +47,6 @@ export default function AdminDashboard({ onLogout }) {
         setError(null);
       } catch (err) {
         console.error("AdminDashboard loading error:", err);
-        // if 401, force logout
         if (String(err).includes("401")) {
           setError("Unauthorized — please log in again.");
           onLogout();
@@ -65,7 +60,7 @@ export default function AdminDashboard({ onLogout }) {
   }, [onLogout]);
 
   if (loading) return <p>Loading interview sessions…</p>;
-  if (error)   return <p style={{ color: "red" }}>{error}</p>;
+  if (error) return <p style={{ color: "red" }}>{error}</p>;
   if (sessions.length === 0) return <p>No sessions available.</p>;
 
   return (
@@ -75,44 +70,52 @@ export default function AdminDashboard({ onLogout }) {
         <div key={session.id} style={styles.card}>
           <h3>Candidate: {session.candidate_name || session.id}</h3>
           <p><strong>Resume:</strong> {session.resume_file}</p>
-          <p>
-            <strong>Created:</strong>{" "}
-            {new Date(session.created_at).toLocaleString()}
-          </p>
+          <p><strong>Created:</strong> {new Date(session.created_at).toLocaleString()}</p>
 
-          <section style={styles.behaviorBlock}>
-            <h4>🧠 Behavioral Logs</h4>
-            {session.behavior.length === 0 ? (
-              <p>No behavior logs.</p>
-            ) : (
-              <ul>
-                {session.behavior.map((b, i) => (
-                  <li key={i}>
-                    [{new Date(b.timestamp).toLocaleTimeString()}]{" "}
-                    Emotion: {b.emotion}, Face:{" "}
-                    {b.face_present ? "Yes" : "No"}, Gaze:{" "}
-                    {b.gaze_direction}
-                  </li>
-                ))}
-              </ul>
+          {/* 🧠 Behavior Logs Dropdown */}
+          <div style={styles.section}>
+            <button style={styles.toggleBtn} onClick={() => toggle(session.id, "behavior")}>
+              🧠 {expandedLogs[session.id]?.behavior ? "Hide" : "Show"} Behavioral Logs
+            </button>
+            {expandedLogs[session.id]?.behavior && (
+              <div style={styles.behaviorBlock}>
+                {session.behavior.length === 0 ? (
+                  <p>No behavior logs.</p>
+                ) : (
+                  <ul>
+                    {session.behavior.map((b, i) => (
+                      <li key={i}>
+                        [{new Date(b.timestamp).toLocaleTimeString()}] Emotion: {b.emotion}, Face: {b.face_present ? "Yes" : "No"}, Gaze: {b.gaze_direction}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
-          </section>
+          </div>
 
-          <section style={styles.qaBlock}>
-            <h4>📋 Q&A Logs</h4>
-            {session.qa.length === 0 ? (
-              <p>No Q&A logs.</p>
-            ) : (
-              session.qa.map((q, idx) => (
-                <div key={idx} style={styles.qaItem}>
-                  <p><strong>Q:</strong> {q.question}</p>
-                  <p><strong>A:</strong> {q.answer}</p>
-                  <p><strong>Score:</strong> {q.score}</p>
-                  <p><strong>Hallucination:</strong> {q.hallucination}</p>
-                </div>
-              ))
+          {/* 📋 Q&A Logs Dropdown */}
+          <div style={styles.section}>
+            <button style={styles.toggleBtn} onClick={() => toggle(session.id, "qa")}>
+              📋 {expandedLogs[session.id]?.qa ? "Hide" : "Show"} Q&A Logs
+            </button>
+            {expandedLogs[session.id]?.qa && (
+              <div style={styles.qaBlock}>
+                {session.qa.length === 0 ? (
+                  <p>No Q&A logs.</p>
+                ) : (
+                  session.qa.map((q, idx) => (
+                    <div key={idx} style={styles.qaItem}>
+                      <p><strong>Q:</strong> {q.question}</p>
+                      <p><strong>A:</strong> {q.answer}</p>
+                      <p><strong>Score:</strong> {q.score}</p>
+                      <p><strong>Hallucination:</strong> {q.hallucination}</p>
+                    </div>
+                  ))
+                )}
+              </div>
             )}
-          </section>
+          </div>
         </div>
       ))}
     </div>
@@ -129,13 +132,27 @@ const styles = {
     padding: "1.5rem 2rem",
     marginBottom: "2rem",
   },
+  section:       { marginTop: "1rem" },
+  toggleBtn:     {
+    background: "#222",
+    color: "#fff",
+    border: "none",
+    padding: "0.5rem 1rem",
+    borderRadius: 5,
+    cursor: "pointer",
+    marginBottom: "0.5rem",
+  },
   behaviorBlock: {
     background: "#f0f8ff",
     padding: "1rem",
     borderRadius: 8,
+  },
+  qaBlock:       {
+    background: "#fdfdfd",
+    padding: "1rem",
+    borderRadius: 8,
     marginTop: "1rem",
   },
-  qaBlock:       { marginTop: "1.5rem" },
   qaItem:        {
     background: "#f9f9f9",
     borderRadius: 6,
