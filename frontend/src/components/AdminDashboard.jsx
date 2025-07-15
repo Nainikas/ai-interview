@@ -2,24 +2,32 @@
 import React, { useEffect, useState } from "react";
 import api from "../api";
 
-export default function AdminDashboard({ authHeader }) {
+export default function AdminDashboard({ authHeader, onLogout }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Debug: show us in the console what header we're actually using
+  console.debug("[AdminDashboard] authHeader:", authHeader);
+
   useEffect(() => {
+    if (!authHeader) {
+      // No auth → bounce back to login
+      onLogout();
+      return;
+    }
     loadAll();
-  }, []);
+  }, [authHeader]);
 
   async function loadAll() {
     try {
-      // 1) Fetch sessions with BasicAuth header
+      // 1) Fetch sessions
       const sessRes = await api.get("/admin/interview-sessions", {
         headers: { Authorization: authHeader }
       });
       const sessionsData = sessRes.data.sessions;
 
-      // 2) For each session, fetch QA and behavior
+      // 2) Fetch QA & behavior for each session
       const enriched = await Promise.all(
         sessionsData.map(async (s) => {
           const [qaRes, behRes] = await Promise.all([
@@ -41,7 +49,7 @@ export default function AdminDashboard({ authHeader }) {
       );
       setSessions(enriched);
     } catch (err) {
-      console.error("Error loading admin data", err);
+      console.error("[AdminDashboard] loading error", err);
       setError("Failed to load admin data. Please check your credentials.");
     } finally {
       setLoading(false);
@@ -49,7 +57,7 @@ export default function AdminDashboard({ authHeader }) {
   }
 
   if (loading) return <p>Loading interview sessions…</p>;
-  if (error) return <p style={{ color: 'red' }}>{error}</p>;
+  if (error)   return <p style={{ color: "red" }}>{error}</p>;
   if (sessions.length === 0) return <p>No sessions available.</p>;
 
   return (
@@ -70,7 +78,7 @@ export default function AdminDashboard({ authHeader }) {
               <ul>
                 {session.behavior.map((b, i) => (
                   <li key={i}>
-                    [{new Date(b.timestamp).toLocaleTimeString()}] 
+                    [{new Date(b.timestamp).toLocaleTimeString()}]  
                     Emotion: {b.emotion}, Face: {b.face_present ? "Yes" : "No"}, Gaze: {b.gaze_direction}
                   </li>
                 ))}
@@ -100,36 +108,10 @@ export default function AdminDashboard({ authHeader }) {
 }
 
 const styles = {
-  container: {
-    padding: "2rem",
-    fontFamily: "system-ui, sans-serif",
-    background: "#f5f5f5",
-    minHeight: "100vh",
-  },
-  title: {
-    fontSize: "2rem",
-    marginBottom: "1.5rem",
-  },
-  card: {
-    background: "#fff",
-    borderRadius: 10,
-    boxShadow: "0 6px 18px rgba(0,0,0,0.1)",
-    padding: "1.5rem 2rem",
-    marginBottom: "2rem",
-  },
-  behaviorBlock: {
-    background: "#f0f8ff",
-    padding: "1rem",
-    borderRadius: 8,
-    marginTop: "1rem",
-  },
-  qaBlock: {
-    marginTop: "1.5rem",
-  },
-  qaItem: {
-    background: "#f9f9f9",
-    borderRadius: 6,
-    padding: "1rem",
-    marginBottom: "1rem",
-  },
+  container: { padding: "2rem", background: "#f5f5f5", minHeight: "100vh" },
+  title: { fontSize: "2rem", marginBottom: "1.5rem" },
+  card: { background: "#fff", borderRadius: 10, boxShadow: "0 6px 18px rgba(0,0,0,0.1)", padding: "1.5rem 2rem", marginBottom: "2rem" },
+  behaviorBlock: { background: "#f0f8ff", padding: "1rem", borderRadius: 8, marginTop: "1rem" },
+  qaBlock: { marginTop: "1.5rem" },
+  qaItem: { background: "#f9f9f9", borderRadius: 6, padding: "1rem", marginBottom: "1rem" },
 };
