@@ -1,5 +1,6 @@
 // src/App.jsx
 import React, { useState } from "react";
+import api from "./api";
 import InterviewSession from "./components/InterviewSession";
 import AdminDashboard from "./components/AdminDashboard";
 import AdminLogin from "./components/AdminLogin";
@@ -12,11 +13,15 @@ export default function App() {
 
   // invoked by AdminLogin with authHeader
   function handleAdminLogin(authHeader) {
+    // set default header for all api calls
+    api.defaults.headers.common["Authorization"] = authHeader;
     setAdminAuth(authHeader);
     setView("admin");
   }
 
   function handleLogout() {
+    // remove default header
+    delete api.defaults.headers.common["Authorization"];
     setAdminAuth(null);
     setView("interview");
     setCandidateId(null);
@@ -55,8 +60,7 @@ export default function App() {
       )}
 
       {view === "admin" && adminAuth && (
-        // Pass auth header down so AdminDashboard can use it
-        <AdminDashboard authHeader={adminAuth} />
+        <AdminDashboard onLogout={handleLogout} />
       )}
     </div>
   );
