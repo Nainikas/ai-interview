@@ -50,12 +50,25 @@ export default function InterviewSession() {
     }, SILENCE_STAGE_1);
   }
 
-  // 🚨 New helper: flush buffered user speech before AI speaks
+  // ✂️ Helper: remove consecutive duplicate words
+  function dedupeAnswer(text) {
+    const words = text.trim().split(/\s+/);
+    const out = [];
+    for (let w of words) {
+      if (out.length === 0 || out[out.length - 1] !== w) {
+        out.push(w);
+      }
+    }
+    return out.join(" ");
+  }
+
+  // 🚨 Modified: flush buffered user speech before AI speaks
   async function flushAnswer() {
     const buf = responseBufferRef.current.trim();
     if (!buf) return;
     responseBufferRef.current = "";
-    await handleUserTurn(buf);
+    const cleaned = dedupeAnswer(buf);
+    await handleUserTurn(cleaned);
   }
 
   async function controlSpeakAndListen(text, scheduleAfter = true) {
