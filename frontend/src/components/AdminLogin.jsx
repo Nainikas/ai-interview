@@ -1,119 +1,65 @@
 // src/components/AdminLogin.jsx
 import React, { useState } from "react";
-import api from "../api"; // your axios/fetch wrapper
 
 export default function AdminLogin({ onLogin }) {
-  const [username, setUsername] = useState("admin");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError]       = useState(null);
+  const BACKEND = import.meta.env.VITE_BACKEND_URL;
 
-  const handleSubmit = async (e) => {
+  async function handleSubmit(e) {
     e.preventDefault();
-    if (!username || !password) {
-      setError("Username and password are required.");
-      return;
-    }
-
-    setSubmitting(true);
-    setError(null);
-
-    // Build Basic auth header
-    const token = btoa(`${username}:${password}`);
-    const authHeader = `Basic ${token}`;
+    const authHeader = "Basic " + btoa(`${username}:${password}`);
 
     try {
-      // Try hitting a protected endpoint
-      await api.get("/admin/interview-sessions", {
-        headers: { Authorization: authHeader }
+      // Try fetching the protected sessions endpoint to verify credentials
+      const res = await fetch(`${BACKEND}/admin/interview-sessions`, {
+        headers: { Authorization: authHeader },
       });
-      // Success! Pass the header up so your app can use it.
+      if (!res.ok) {
+        throw new Error(`${res.status}`);
+      }
+
+      // Success → persist the header and notify App
+      localStorage.setItem("ADMIN_AUTH", authHeader);
       onLogin(authHeader);
-    } catch (err) {
-      console.error("Admin login failed", err);
-      setError("Invalid credentials or no access.");
-    } finally {
-      setSubmitting(false);
+    } catch {
+      setError("Invalid username or password");
     }
-  };
+  }
 
   return (
     <div style={styles.container}>
-      <form onSubmit={handleSubmit} style={styles.card}>
-        <h1 style={styles.heading}>🔒 Admin Login</h1>
+      <h2>Admin Login</h2>
+      <form onSubmit={handleSubmit} style={styles.form}>
         <input
+          style={styles.input}
           type="text"
           placeholder="Username"
           value={username}
           onChange={e => setUsername(e.target.value)}
-          style={styles.input}
-          autoFocus
+          required
         />
         <input
+          style={styles.input}
           type="password"
           placeholder="Password"
           value={password}
           onChange={e => setPassword(e.target.value)}
-          style={styles.input}
+          required
         />
-        <button type="submit" style={styles.button} disabled={submitting}>
-          {submitting ? "Logging in…" : "Login"}
+        <button style={styles.button} type="submit">
+          Log In
         </button>
-        {error && <p style={styles.error}>{error}</p>}
+        {error && <p style={{ color: "red" }}>{error}</p>}
       </form>
     </div>
   );
 }
 
-
 const styles = {
-  container: {
-    minHeight: "100vh",
-    background: "#f2f2f2",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: "2rem",
-  },
-  card: {
-    background: "#fff",
-    padding: "2rem 3rem",
-    borderRadius: 12,
-    boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
-    textAlign: "center",
-    maxWidth: 400,
-    width: "100%",
-  },
-  heading: {
-    fontSize: "1.8rem",
-    marginBottom: "0.5rem",
-  },
-  subheading: {
-    color: "#666",
-    fontSize: "0.95rem",
-    marginBottom: "1.5rem",
-  },
-  input: {
-    width: "100%",
-    padding: "10px",
-    fontSize: "1rem",
-    marginBottom: "1rem",
-    borderRadius: 6,
-    border: "1px solid #ccc",
-  },
-  button: {
-    width: "100%",
-    padding: "10px",
-    fontSize: "1rem",
-    background: "#222",
-    color: "#fff",
-    border: "none",
-    borderRadius: 6,
-    cursor: "pointer",
-  },
-  error: {
-    marginTop: "1rem",
-    color: "#b00020",
-    fontWeight: "bold",
-  },
+  container: { padding: "2rem", maxWidth: 320, margin: "3rem auto", textAlign: "center" },
+  form:      { display: "flex", flexDirection: "column", gap: "1rem" },
+  input:     { padding: "0.75rem", fontSize: "1rem", borderRadius: 4, border: "1px solid #ccc" },
+  button:    { padding: "0.75rem", fontSize: "1rem", borderRadius: 4, background: "#222", color: "#fff", cursor: "pointer" },
 };
