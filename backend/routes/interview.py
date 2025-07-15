@@ -82,14 +82,34 @@ class AskRequest(BaseModel):
 @router.post("/ask")
 async def ask(req: AskRequest):
     try:
-        real_answers = [m for m in req.history if m["role"] == "user" and m["content"] not in ("[EMPTY]", "[SKIP]")]
+        real_answers = [
+            m for m in req.history 
+            if m["role"] == "user" and m["content"] not in ("[EMPTY]", "[SKIP]")
+        ]
 
+        # ── Initial questions ──
         if len(real_answers) == 0:
             return {"answer": "Hello! Which role are you applying for today?", "score": None}
         if len(real_answers) == 1:
             return {"answer": "Please give me a brief introduction of your previous work experience, education, and key skills.", "score": None}
 
-        prev_q = req.history[-1]["content"]
+        # ── Extract previous real question ──
+        def extract_last_question(history):
+            for entry in reversed(history):
+                if entry["role"] != "assistant":
+                    continue
+                content = entry["content"].strip().lower()
+                if any(skip in content for skip in [
+                    "would you like me to repeat",
+                    "let's move on",
+                    "since i didn't hear anything",
+                    "💡 hint"
+                ]):
+                    continue
+                return entry["content"]
+            return "[unknown]"
+
+        prev_q = extract_last_question(req.history)
 
         # ─── Clarify / Teach Check ───────────────────────────────
         try:
@@ -115,7 +135,7 @@ async def ask(req: AskRequest):
                 "score": None
             }
 
-        # ─── Prepare LLM Prompt ─────────────────────────────────
+        # ─── Construct LLM Prompt ───────────────────────────────
         SYSTEM_PROMPT = """
 You are a professional, supportive AI interview agent.
 On each turn you will receive exactly one of:
@@ -127,7 +147,7 @@ Follow this state-machine exactly:
 1. If the user’s message is non-empty, ask an adaptive follow-up question based on prior history, job role, and resume.
 2. If message is [EMPTY] or [SKIP], gently move on and ask another relevant question.
 Always ask one clear, professional, role-specific interview question per turn.
-Make sure to ask balanced set of behavioral and technical (including fundamental concepts based of prior history, job role, and resume) while maintaining natural conversational flow.
+Make sure to ask a balanced set of behavioral and technical questions based on context.
 Tone should be adapted based on recent behavior logs (e.g., supportive if the user appears disengaged).
 """
 
@@ -145,6 +165,7 @@ Tone should be adapted based on recent behavior logs (e.g., supportive if the us
             print(f"⚠️ Vector DB retrieval failed: {e}")
             context = ""
         messages.insert(1, {"role": "system", "content": f"Resume context:\n{context}"})
+
 
         # ─── Inject Candidate Tone ──────────────────────────────
         try:
@@ -169,7 +190,7 @@ Tone should be adapted based on recent behavior logs (e.g., supportive if the us
         except Exception as e:
             print("⚠️ Coaching hint error:", e)
 
-        # ─── Score Last Answer ─────────────────────────────────
+        # ─── Score & Log Last Answer ───────────────────────────
         result = await score_answer(prev_q, req.user_input)
         await database.execute(
             interview_logs.insert().values(
