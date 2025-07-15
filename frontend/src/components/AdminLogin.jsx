@@ -64,15 +64,13 @@ const styles = {
   container: {
     display: "flex",
     flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: "100vh",
-    textAlign: "center",
-    margin: "auto",
-    background: "#fff", // optional visual fix
+    alignItems: "center",      // 🔹 center horizontally
+    justifyContent: "center",  // 🔹 center vertically
     padding: "2rem",
-    borderRadius: "12px",
-    boxShadow: "0 6px 20px rgba(0,0,0,0.15)",
+    maxWidth: 320,
+    margin: "auto",
+    minHeight: "100vh",        // 🔹 ensure it fills the viewport vertically
+    textAlign: "center"
   },
   title:     { marginBottom: "1rem", fontSize: "1.5rem", color: "#222" },
   form:      { display: "flex", flexDirection: "column", gap: "1rem" },
