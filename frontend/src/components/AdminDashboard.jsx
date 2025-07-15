@@ -17,12 +17,12 @@ export default function AdminDashboard({ onLogout }) {
         // 2️⃣ Enrich each session with QA + behavior logs
         const enriched = await Promise.all(
           sessionsData.map(async (s) => {
-            const { qa_log = [] } = await api.get("/admin/qa-log", {
-              params: { candidate_id: s.id },
-            });
-            const { logs = [] } = await api.get("/admin/behavior-logs", {
-              params: { candidate_id: s.id },
-            });
+            const { qa_log = [] } = await api.get(
+              `/admin/qa-log?candidate_id=${s.id}`
+            );
+            const { logs = [] } = await api.get(
+              `/admin/behavior-logs?candidate_id=${s.id}`
+            );
             return { ...s, qa: qa_log, behavior: logs };
           })
         );
