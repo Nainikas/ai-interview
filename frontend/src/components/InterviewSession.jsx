@@ -5,7 +5,6 @@ import useMediaPipeFaceMesh from "../hooks/useMediaPipeFaceMesh";
 
 const SILENCE_STAGE_1 = 10000;
 const SILENCE_STAGE_2 = 6000;
-const REC_FINALIZE_DELAY = 2000; // ✅ Added fixed delay after final result
 
 const SILENCE_PROMPT =
   "It seems you’ve been quiet. Would you like me to repeat the last question?";
@@ -23,6 +22,7 @@ export default function InterviewSession() {
   const lastFinalRef = useRef("");
   const lastSpokenTextRef = useRef("");
   const hasHeardRef = useRef(false);
+  const responseBufferRef = useRef("");
   const sessionTimer = useRef(null);
   const silenceTimers = useRef({ prompt: null, skip: null });
   const candidateIdRef = useRef(null);
@@ -85,6 +85,7 @@ export default function InterviewSession() {
 
   async function handleUserTurn(content) {
     historyRef.current.push({ role: "user", content });
+    responseBufferRef.current = "";  // clear the buffer for the next answer
     await fetchNext(content);
   }
 
@@ -145,6 +146,13 @@ export default function InterviewSession() {
     return handleUserTurn(utter);
   }
 
+  // ✅ Semantic completeness check
+  function isComplete(utter) {
+    const wordCount = utter.trim().split(/\s+/).length;
+    const endsWithPunctuation = /[a-zA-Z0-9][\.\?!'"”)]?$/.test(utter.trim());
+    return wordCount > 6 && endsWithPunctuation;
+  }
+
   useEffect(() => {
     if (initedRef.current) return;
     initedRef.current = true;
@@ -167,14 +175,19 @@ export default function InterviewSession() {
       }
       if (!final && !interim) return;
 
-      lastFinalRef.current = (final || interim).trim();
-      hasHeardRef.current = true;
-
-      if (interim) console.log("[ASR] Interim:", interim);
       if (final) {
+        // append to buffer and update lastFinal
+        responseBufferRef.current += final.trim() + " ";
+        lastFinalRef.current = responseBufferRef.current.trim();
+        hasHeardRef.current = true;
         console.log("[ASR] Final:", final);
         clearTimeout(rec.finalizeTimer);
-        rec.finalizeTimer = setTimeout(onFinalize, REC_FINALIZE_DELAY); // ✅ fixed 2s silence after final
+        const delay = isComplete(final) ? 1200 : 3000;
+        rec.finalizeTimer = setTimeout(onFinalize, delay);
+      } else {
+        lastFinalRef.current = interim.trim();
+        hasHeardRef.current = true;
+        console.log("[ASR] Interim:", interim);
       }
     };
 
