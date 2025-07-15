@@ -19,9 +19,11 @@ export default function InterviewSession() {
   const initedRef = useRef(false);
   const isSpeakingRef = useRef(false);
   const isPausedRef = useRef(false);
+  const fetchingNextRef = useRef(false); // ✅ Prevent duplicate fetchNext
   const historyRef = useRef([]);
   const lastQuestionRef = useRef("");
   const lastFinalRef = useRef("");
+  const lastSpokenTextRef = useRef(""); // ✅ Store last AI spoken response
   const hasHeardRef = useRef(false);
   const sessionTimer = useRef(null);
   const silenceTimers = useRef({ prompt: null, skip: null });
@@ -33,7 +35,6 @@ export default function InterviewSession() {
     clearTimeout(silenceTimers.current.prompt);
     clearTimeout(silenceTimers.current.skip);
     silenceTimers.current.prompt = silenceTimers.current.skip = null;
-    // intentionally NOT resetting hasHeardRef here
   }
 
   function scheduleSilence() {
@@ -55,9 +56,12 @@ export default function InterviewSession() {
     isPausedRef.current = true;
     clearSilenceTimers();
 
+    await new Promise(r => setTimeout(r, 400)); // ✅ Pause mic 400ms before TTS
     await audioCtx.suspend();
+    lastSpokenTextRef.current = text; // ✅ Track for debounce
     await speakText(text);
     await audioCtx.resume();
+    await new Promise(r => setTimeout(r, 500)); // ✅ Resume mic 500ms after TTS
 
     isSpeakingRef.current = false;
     if (isPausedRef.current) {
@@ -93,6 +97,9 @@ export default function InterviewSession() {
   }
 
   async function fetchNext(user_input = "") {
+    if (fetchingNextRef.current) return;
+    fetchingNextRef.current = true;
+
     clearSilenceTimers();
     const raw = historyRef.current.slice(-10);
     const clean = raw.map(({ role, content }) => ({ role, content }));
@@ -116,6 +123,8 @@ export default function InterviewSession() {
         "Sorry, I had trouble fetching the next question—let's try again shortly.",
         false
       );
+    } finally {
+      fetchingNextRef.current = false;
     }
   }
 
@@ -130,6 +139,12 @@ export default function InterviewSession() {
     if (isSpeakingRef.current) return;
     const utter = lastFinalRef.current.trim();
     clearSilenceTimers();
+
+    const lastTTS = lastSpokenTextRef.current.trim().toLowerCase();
+    if (utter.toLowerCase() === lastTTS) {
+      console.log("[ASR] Detected echo of last AI prompt. Ignoring.");
+      return;
+    }
 
     if (!utter) return handleUserTurn("[EMPTY]");
     if (/\b(move on|skip|next question|continue)\b/i.test(utter)) {
@@ -163,7 +178,7 @@ export default function InterviewSession() {
       lastFinalRef.current = (final || interim).trim();
       hasHeardRef.current = true;
 
-      // ✅ DEBUG LOGS
+      // ✅ DEBUG
       if (interim) console.log("[ASR] Interim:", interim);
       if (final) console.log("[ASR] Final:", final);
 
