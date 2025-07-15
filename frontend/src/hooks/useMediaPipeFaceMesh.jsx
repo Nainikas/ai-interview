@@ -2,6 +2,7 @@
 import { useEffect, useRef } from "react";
 import * as faceMesh from "@mediapipe/face_mesh";
 import * as drawingUtils from "@mediapipe/drawing_utils";
+import * as faceapi from "face-api.js";
 
 export default function useMediaPipeFaceMesh(onData) {
   const videoRef = useRef(null);
@@ -24,7 +25,7 @@ export default function useMediaPipeFaceMesh(onData) {
       minTrackingConfidence: 0.5,
     });
 
-    faceMeshInstance.onResults((results) => {
+    faceMeshInstance.onResults(async (results) => {
       const canvas = canvasRef.current;
       const ctx = canvas?.getContext("2d");
       if (!ctx) return;
@@ -32,14 +33,39 @@ export default function useMediaPipeFaceMesh(onData) {
       canvas.width = videoRef.current.videoWidth;
       canvas.height = videoRef.current.videoHeight;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+
       if (results.multiFaceLandmarks.length > 0) {
-        drawingUtils.drawConnectors(ctx, results.multiFaceLandmarks[0], faceMesh.FACEMESH_TESSELATION,
-          { color: "#C0C0C070", lineWidth: 1 });
-        onData(results.multiFaceLandmarks[0]);
+        drawingUtils.drawConnectors(
+          ctx,
+          results.multiFaceLandmarks[0],
+          faceMesh.FACEMESH_TESSELATION,
+          { color: "#C0C0C070", lineWidth: 1 }
+        );
+
+        // Run expression detection using face-api
+        const detections = await faceapi
+          .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+          .withFaceExpressions();
+
+        let dominantExpression = "neutral";
+        if (detections && detections.expressions) {
+          const sorted = Object.entries(detections.expressions).sort(
+            (a, b) => b[1] - a[1]
+          );
+          dominantExpression = sorted[0][0]; // e.g., "happy", "sad", "angry"
+        }
+
+        onData(results.multiFaceLandmarks[0], dominantExpression);
       }
     });
 
-    async function loadCamera() {
+    async function loadModelsAndCamera() {
+      // Ensure models are loaded from public/models
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.load("/models"),
+        faceapi.nets.faceExpressionNet.load("/models"),
+      ]);
+
       const { Camera } = await import("@mediapipe/camera_utils");
       camera = new Camera(videoRef.current, {
         onFrame: async () => {
@@ -51,7 +77,7 @@ export default function useMediaPipeFaceMesh(onData) {
       camera.start();
     }
 
-    loadCamera();
+    loadModelsAndCamera();
 
     return () => {
       if (camera && camera.stop) camera.stop();
