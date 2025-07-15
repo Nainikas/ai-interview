@@ -5,6 +5,7 @@ import useMediaPipeFaceMesh from "../hooks/useMediaPipeFaceMesh";
 
 const SILENCE_STAGE_1 = 10000;
 const SILENCE_STAGE_2 = 6000;
+const REC_FINALIZE_DELAY = 2000; // ✅ Added fixed delay after final result
 
 const SILENCE_PROMPT =
   "It seems you’ve been quiet. Would you like me to repeat the last question?";
@@ -170,17 +171,11 @@ export default function InterviewSession() {
       hasHeardRef.current = true;
 
       if (interim) console.log("[ASR] Interim:", interim);
-      if (final) console.log("[ASR] Final:", final);
-
-      // ✅ Modified debounce logic here
-      const wc = lastFinalRef.current.trim().split(/\s+/).length;
-      let debounce = 1000;
-      if (wc <= 3) debounce = 800;
-      else if (wc <= 8) debounce = 1200;
-      else debounce = 1800;
-
-      clearTimeout(rec.finalizeTimer);
-      rec.finalizeTimer = setTimeout(onFinalize, debounce);
+      if (final) {
+        console.log("[ASR] Final:", final);
+        clearTimeout(rec.finalizeTimer);
+        rec.finalizeTimer = setTimeout(onFinalize, REC_FINALIZE_DELAY); // ✅ fixed 2s silence after final
+      }
     };
 
     rec.onerror = (e) => {
