@@ -1,6 +1,4 @@
-// src/components/InterviewSession.jsx
 import React, { useEffect, useRef, useState } from "react";
-import { v4 as uuidv4 } from "uuid";
 import api from "../api";
 import { speakText, audioCtx } from "../utils/tts";
 import useMediaPipeFaceMesh from "../hooks/useMediaPipeFaceMesh";
@@ -35,7 +33,7 @@ export default function InterviewSession() {
     clearTimeout(silenceTimers.current.prompt);
     clearTimeout(silenceTimers.current.skip);
     silenceTimers.current.prompt = silenceTimers.current.skip = null;
-    hasHeardRef.current = false;
+    // intentionally NOT resetting hasHeardRef here
   }
 
   function scheduleSilence() {
@@ -86,7 +84,6 @@ export default function InterviewSession() {
   async function handleUserTurn(content) {
     historyRef.current.push({ role: "user", content });
     if (content !== "[EMPTY]" && content !== "[SKIP]") {
-      // Include session_id so backend's FeedbackRequest model is satisfied
       api.post("/interview/feedback", {
         session_id: candidateIdRef.current,
         answer: content,
@@ -166,6 +163,10 @@ export default function InterviewSession() {
       lastFinalRef.current = (final || interim).trim();
       hasHeardRef.current = true;
 
+      // ✅ DEBUG LOGS
+      if (interim) console.log("[ASR] Interim:", interim);
+      if (final) console.log("[ASR] Final:", final);
+
       const wc = lastFinalRef.current.split(/\s+/).length;
       const delay = final
         ? 0
@@ -202,7 +203,14 @@ export default function InterviewSession() {
   const startInterview = async () => {
     if (started) return;
     setStarted(true);
-    candidateIdRef.current = uuidv4();
+
+    try {
+      const res = await api.post("/interview/start-session");
+      candidateIdRef.current = res.session_id;
+    } catch (e) {
+      console.error("Failed to start session:", e);
+      candidateIdRef.current = `fallback-${Date.now()}`;
+    }
 
     if (audioCtx.state === "suspended") await audioCtx.resume();
     try { recRef.current.start(); } catch {}
