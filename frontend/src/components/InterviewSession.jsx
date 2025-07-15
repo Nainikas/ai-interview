@@ -141,7 +141,7 @@ export default function InterviewSession() {
     } catch (e) {
       console.warn("fetchNext failed:", e);
       await controlSpeakAndListen(
-        "Sorry, I had trouble fetching the next question—let's try again shortly.",
+        "Sorry, I had trouble fetching the next question—let’s try again shortly.",
         false
       );
     } finally {
@@ -211,21 +211,18 @@ export default function InterviewSession() {
         if (r.isFinal) final += r[0].transcript;
         else interim += r[0].transcript;
       }
-      if (!final && !interim) return;
+      if (!final) return;
 
-      const chunk = (final || interim).trim();
+      // only append true finals, ignore interim
+      const chunk = final.trim();
       responseBufferRef.current += chunk + " ";
       lastFinalRef.current = responseBufferRef.current.trim();
       hasHeardRef.current = true;
 
-      if (final) {
-        console.log("[ASR] Final:", final);
-        clearTimeout(rec.finalizeTimer);
-        const delay = isComplete(final) ? 1200 : 3000;
-        rec.finalizeTimer = setTimeout(onFinalize, delay);
-      } else {
-        console.log("[ASR] Interim:", interim);
-      }
+      console.log("[ASR] Final:", final);
+      clearTimeout(rec.finalizeTimer);
+      const delay = isComplete(final) ? 1200 : 3000;
+      rec.finalizeTimer = setTimeout(onFinalize, delay);
     };
 
     rec.onerror = (e) => {
