@@ -1,22 +1,37 @@
 // src/api.js
+const BASE = import.meta.env.VITE_BACKEND_URL || "";
+
 const api = {
-  get: async (path) => {
+  get: async (path, opts = {}) => {
+    const headers = { ...(opts.headers || {}) };
+    const token = localStorage.getItem("ADMIN_AUTH");
+    if (token) headers["Authorization"] = token;
     try {
-      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}${path}`);
-      if (!res.ok) throw new Error(`API GET ${path} failed`);
+      const res = await fetch(`${BASE}${path}`, {
+        method: "GET",
+        headers,
+        credentials: opts.credentials || "same-origin",
+      });
+      if (!res.ok) throw new Error(`API GET ${path} failed: ${res.status}`);
       return await res.json();
     } catch (err) {
       console.error("❌ API GET Error:", err);
-      return {};
+      throw err;
     }
   },
 
-  post: async (path, body) => {
+  post: async (path, body, opts = {}) => {
+    const headers = {};
     const isFormData = body instanceof FormData;
+    if (!isFormData) headers["Content-Type"] = "application/json";
+    const token = localStorage.getItem("ADMIN_AUTH");
+    if (token) headers["Authorization"] = token;
+
     try {
-      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}${path}`, {
+      const res = await fetch(`${BASE}${path}`, {
         method: "POST",
-        headers: isFormData ? {} : { "Content-Type": "application/json" },
+        headers,
+        credentials: opts.credentials || "same-origin",
         body: isFormData ? body : JSON.stringify(body),
       });
       if (!res.ok) {
@@ -26,7 +41,7 @@ const api = {
       return await res.json();
     } catch (err) {
       console.error("❌ API POST Error:", err);
-      return {};
+      throw err;
     }
   },
 };
