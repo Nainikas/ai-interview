@@ -35,14 +35,17 @@ export default function useMediaPipeFaceMesh(onData) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       if (results.multiFaceLandmarks.length > 0) {
+        const landmarks = results.multiFaceLandmarks[0];
+
+        // Draw facial mesh
         drawingUtils.drawConnectors(
           ctx,
-          results.multiFaceLandmarks[0],
+          landmarks,
           faceMesh.FACEMESH_TESSELATION,
           { color: "#C0C0C070", lineWidth: 1 }
         );
 
-        // Run expression detection using face-api
+        // 🔹 Emotion detection using face-api.js
         const detections = await faceapi
           .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
           .withFaceExpressions();
@@ -52,15 +55,39 @@ export default function useMediaPipeFaceMesh(onData) {
           const sorted = Object.entries(detections.expressions).sort(
             (a, b) => b[1] - a[1]
           );
-          dominantExpression = sorted[0][0]; // e.g., "happy", "sad", "angry"
+          dominantExpression = sorted[0][0];
         }
 
-        onData(results.multiFaceLandmarks[0], dominantExpression);
+        // 🔹 Gaze direction estimation
+        let rawGaze = "center";
+        try {
+          const leftEye = landmarks[33];   // outer corner of left eye
+          const rightEye = landmarks[263]; // outer corner of right eye
+          const iris = landmarks[468];     // center of right iris (refined landmarks must be on)
+
+          const eyeWidth = rightEye.x - leftEye.x;
+          const irisOffset = iris.x - leftEye.x;
+          const relX = irisOffset / eyeWidth;
+
+          if (relX < 0.35) rawGaze = "left";
+          else if (relX > 0.65) rawGaze = "right";
+
+          const eyeY = (leftEye.y + rightEye.y) / 2;
+          const relY = iris.y - eyeY;
+
+          if (relY > 0.03) rawGaze = "down";
+          else if (Math.abs(relY) > 0.06) rawGaze = "away";
+        } catch (err) {
+          console.warn("Gaze detection error:", err);
+        }
+
+        // ✅ Send all 3 signals: landmarks, emotion, gaze
+        onData(landmarks, dominantExpression, rawGaze);
       }
     });
 
     async function loadModelsAndCamera() {
-      // Ensure models are loaded from public/models
+      // Load face-api models from public/models
       await Promise.all([
         faceapi.nets.tinyFaceDetector.load("/models"),
         faceapi.nets.faceExpressionNet.load("/models"),
