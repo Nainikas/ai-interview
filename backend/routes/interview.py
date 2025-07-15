@@ -191,27 +191,3 @@ Tone should be adapted based on recent behavior logs (e.g., supportive if the us
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(500, f"/ask failed: {e}")
-
-# ─── Feedback (Optional Answers) ───────────────────────────────
-class FeedbackRequest(BaseModel):
-    session_id: str
-    answer: str
-
-@router.post("/feedback")
-async def feedback(request: FeedbackRequest):
-    try:
-        result = await score_answer("[feedback]", request.answer)
-        await database.execute(
-            interview_logs.insert().values(
-                candidate_id=request.session_id,
-                question=None,
-                answer=request.answer,
-                score=result["score"],
-                subscores=result["subscores"],
-                hallucination=result["hallucination"],
-                timestamp=datetime.utcnow()
-            )
-        )
-        return result
-    except Exception as e:
-        raise HTTPException(500, f"/feedback failed: {e}")
