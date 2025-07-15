@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import api from "./api";
 import InterviewSession from "./components/InterviewSession";
 import AdminDashboard from "./components/AdminDashboard";
@@ -8,21 +8,24 @@ import ResumeUpload from "./components/ResumeUpload";
 
 export default function App() {
   const [view, setView] = useState("interview"); // "interview" | "admin-login" | "admin"
-  const [adminAuth, setAdminAuth] = useState(null); // Basic auth header string
   const [candidateId, setCandidateId] = useState(null);
 
-  // invoked by AdminLogin with authHeader
+  // On mount, restore any existing auth token
+  useEffect(() => {
+    const token = localStorage.getItem("ADMIN_AUTH");
+    if (token) {
+      setView("admin");
+    }
+  }, []);
+
   function handleAdminLogin(authHeader) {
-    // set default header for all api calls
-    api.defaults.headers.common["Authorization"] = authHeader;
-    setAdminAuth(authHeader);
+    // Persist for subsequent API calls and page reloads
+    localStorage.setItem("ADMIN_AUTH", authHeader);
     setView("admin");
   }
 
   function handleLogout() {
-    // remove default header
-    delete api.defaults.headers.common["Authorization"];
-    setAdminAuth(null);
+    localStorage.removeItem("ADMIN_AUTH");
     setView("interview");
     setCandidateId(null);
   }
@@ -31,11 +34,11 @@ export default function App() {
     <div style={{ position: "absolute", top: 20, right: 30, zIndex: 100 }}>
       <button
         style={styles.button}
-        onClick={() => setView(adminAuth ? "admin" : "admin-login")}
+        onClick={() => setView(localStorage.getItem("ADMIN_AUTH") ? "admin" : "admin-login")}
       >
-        {adminAuth ? "Admin Dashboard" : "Admin Login"}
+        {localStorage.getItem("ADMIN_AUTH") ? "Admin Dashboard" : "Admin Login"}
       </button>
-      {adminAuth && (
+      {localStorage.getItem("ADMIN_AUTH") && (
         <button style={styles.logoutButton} onClick={handleLogout}>
           Logout
         </button>
@@ -48,7 +51,7 @@ export default function App() {
       {adminControls}
 
       {view === "interview" && !candidateId && (
-        <ResumeUpload onUploaded={id => setCandidateId(id)} />
+        <ResumeUpload onUploaded={(id) => setCandidateId(id)} />
       )}
 
       {view === "interview" && candidateId && (
@@ -59,7 +62,7 @@ export default function App() {
         <AdminLogin onLogin={handleAdminLogin} />
       )}
 
-      {view === "admin" && adminAuth && (
+      {view === "admin" && localStorage.getItem("ADMIN_AUTH") && (
         <AdminDashboard onLogout={handleLogout} />
       )}
     </div>
