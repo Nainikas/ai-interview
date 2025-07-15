@@ -1,3 +1,4 @@
+# Build tools
 setuptools>=68.0
 wheel>=0.42.0
 
@@ -9,7 +10,7 @@ pydantic-settings==2.10.1
 python-dotenv==1.0.1
 python-multipart==0.0.9
 
-# LangChain & OpenAI
+# LangChain + OpenAI
 langchain==0.3.26
 langchain-core==0.3.68
 langchain-openai==0.3.28
@@ -18,36 +19,36 @@ langchain-text-splitters==0.3.8
 openai==1.95.0
 tiktoken==0.9.0
 
+# Vectorstore
+chromadb==1.0.15
+chroma-hnswlib==0.7.3
+numpy==1.24.4  # Compatible with chroma deps
+
 # Database
 databases==0.9.0
 SQLAlchemy==2.0.41
 asyncpg==0.30.0
 psycopg2-binary==2.9.10
 
-# Resume parsing (PDFs, DOCX)
+# Resume parsing
 pypdf==5.8.0
 PyPDF2==3.0.1
 python-docx==1.1.0
 
-# JSON + scoring
-dataclasses-json==0.6.7
+# JSON/scoring utils
 orjson==3.10.18
+dataclasses-json==0.6.7
 tenacity==9.1.2
 
-# Behavior logging + analytics
+# HTTP clients
 requests==2.32.4
 httpx==0.28.1
 
-# Chroma vectorstore (with compatible numpy)
-chromadb==1.0.15
-chroma-hnswlib==0.7.3
-numpy==1.24.4  
+# Telemetry (optional)
+opentelemetry-api==1.35.0
+opentelemetry-sdk==1.35.0
+opentelemetry-instrumentation-fastapi==0.56b0
 
 # Testing
 pytest==8.4.1
 pytest-asyncio==1.0.0
-
-# Optional: OpenTelemetry (if used for monitoring)
-opentelemetry-api==1.35.0
-opentelemetry-sdk==1.35.0
-opentelemetry-instrumentation-fastapi==0.56b0
