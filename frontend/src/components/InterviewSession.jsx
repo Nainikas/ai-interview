@@ -5,9 +5,6 @@ import useMediaPipeFaceMesh from "../hooks/useMediaPipeFaceMesh";
 
 const SILENCE_STAGE_1 = 10000;
 const SILENCE_STAGE_2 = 6000;
-const SHORT_ANSWER_WORDS = 5;
-const SHORT_DEBOUNCE = 800;
-const LONG_DEBOUNCE = 1500;
 
 const SILENCE_PROMPT =
   "It seems you’ve been quiet. Would you like me to repeat the last question?";
@@ -56,12 +53,12 @@ export default function InterviewSession() {
     isPausedRef.current = true;
     clearSilenceTimers();
 
-    await new Promise(r => setTimeout(r, 400)); // Pause mic 400ms before TTS
+    await new Promise(r => setTimeout(r, 400));
     await audioCtx.suspend();
-    lastSpokenTextRef.current = text; // Track for debounce
+    lastSpokenTextRef.current = text;
     await speakText(text);
     await audioCtx.resume();
-    await new Promise(r => setTimeout(r, 500)); // Resume mic 500ms after TTS
+    await new Promise(r => setTimeout(r, 500));
 
     isSpeakingRef.current = false;
     if (isPausedRef.current) {
@@ -87,7 +84,7 @@ export default function InterviewSession() {
 
   async function handleUserTurn(content) {
     historyRef.current.push({ role: "user", content });
-    await fetchNext(content); // ✅ Feedback endpoint removed
+    await fetchNext(content);
   }
 
   async function fetchNext(user_input = "") {
@@ -175,15 +172,15 @@ export default function InterviewSession() {
       if (interim) console.log("[ASR] Interim:", interim);
       if (final) console.log("[ASR] Final:", final);
 
-      const wc = lastFinalRef.current.split(/\s+/).length;
-      const delay = final
-        ? 0
-        : wc <= SHORT_ANSWER_WORDS
-        ? SHORT_DEBOUNCE
-        : LONG_DEBOUNCE;
+      // ✅ Modified debounce logic here
+      const wc = lastFinalRef.current.trim().split(/\s+/).length;
+      let debounce = 1000;
+      if (wc <= 3) debounce = 800;
+      else if (wc <= 8) debounce = 1200;
+      else debounce = 1800;
 
       clearTimeout(rec.finalizeTimer);
-      rec.finalizeTimer = setTimeout(onFinalize, delay);
+      rec.finalizeTimer = setTimeout(onFinalize, debounce);
     };
 
     rec.onerror = (e) => {
