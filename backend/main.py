@@ -53,7 +53,7 @@ async def log_requests(request: Request, call_next):
 # ─── Router Registration ────────────────────────────────────────
 app.include_router(interview_router, prefix="/interview", tags=["Interview Flow"])
 app.include_router(behavior_router, prefix="/interview", tags=["Behavior Logs"])
-app.include_router(admin_router, prefix="/admin", tags=["Admin Dashboard"])
+app.include_router(admin_router, tags=["Admin Dashboard"])
 app.include_router(speak_router, tags=["TTS"])
 app.include_router(clarify_router, tags=["Clarify Check"])
 
