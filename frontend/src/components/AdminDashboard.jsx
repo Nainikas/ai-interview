@@ -1,21 +1,44 @@
-// src/components/AdminDashboard.jsx
 import React, { useEffect, useState } from "react";
 import api from "../api";
 
-export default function AdminDashboard() {
-  const [logs, setLogs] = useState([]);
+export default function AdminDashboard({ authHeader }) {
+  const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchLogs();
+    loadAll();
   }, []);
 
-  async function fetchLogs() {
+  async function loadAll() {
     try {
-      const res = await api.get("/admin/logs");
-      setLogs(res.data.sessions || []);
+      // 1) get all sessions
+      const sessRes = await api.get("/admin/interview-sessions", {
+        headers: { Authorization: authHeader }
+      });
+      const sessions = sessRes.data.sessions;
+
+      // 2) for each session, fetch QA and behavior in parallel
+      const enriched = await Promise.all(sessions.map(async (s) => {
+        const [qaRes, behRes] = await Promise.all([
+          api.get("/admin/qa-log", {
+            headers: { Authorization: authHeader },
+            params: { candidate_id: s.id }
+          }),
+          api.get("/admin/behavior-logs", {
+            headers: { Authorization: authHeader },
+            params: { candidate_id: s.id }
+          })
+        ]);
+        return {
+          ...s,
+          qa: qaRes.data.qa_log,
+          behavior: behRes.data.logs
+        };
+      }));
+
+      setSessions(enriched);
     } catch (err) {
-      console.error("Error fetching logs", err);
+      console.error("Error loading admin data", err);
     } finally {
       setLoading(false);
     }
@@ -26,39 +49,49 @@ export default function AdminDashboard() {
       <h1 style={styles.title}>🧑‍💼 Admin Dashboard</h1>
 
       {loading ? (
-        <p>Loading interview sessions...</p>
-      ) : logs.length === 0 ? (
+        <p>Loading interview sessions…</p>
+      ) : sessions.length === 0 ? (
         <p>No sessions available.</p>
       ) : (
-        logs.map((session) => (
-          <div key={session.session_id} style={styles.card}>
-            <h3>Candidate ID: {session.candidate_id}</h3>
-            <p><strong>Session ID:</strong> {session.session_id}</p>
-            <p><strong>Start Time:</strong> {session.start_time}</p>
+        sessions.map((session) => (
+          <div key={session.id} style={styles.card}>
+            <h3>Candidate: {session.candidate_name || session.id}</h3>
+            <p><strong>Session ID:</strong> {session.id}</p>
+            <p><strong>Resume:</strong> {session.resume_file}</p>
+            <p><strong>Created:</strong> {new Date(session.created_at).toLocaleString()}</p>
 
             <div style={styles.behaviorBlock}>
-              <h4>🧠 Behavioral Analysis</h4>
-              <ul>
-                <li><strong>Eye Contact:</strong> {session.behavior.eye_contact}</li>
-                <li><strong>Expression:</strong> {session.behavior.expression}</li>
-                <li><strong>Presence:</strong> {session.behavior.presence}</li>
-                <li><strong>Suspicious?</strong> {session.behavior.suspicious ? "⚠️ Yes" : "✅ No"}</li>
-              </ul>
+              <h4>🧠 Behavioral Logs</h4>
+              {session.behavior.length === 0 ? (
+                <p>No behavior logs.</p>
+              ) : (
+                <ul>
+                  {session.behavior.map((b, i) => (
+                    <li key={i}>
+                      [{new Date(b.timestamp).toLocaleTimeString()}]  
+                      Emotion: {b.emotion},  
+                      Face: {b.face_present ? "Yes" : "No"},  
+                      Gaze: {b.gaze_direction}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             <div style={styles.qaBlock}>
-              <h4>📋 Interview Q&A</h4>
-              {session.qa.map((entry, index) => (
-                <div key={index} style={styles.qaItem}>
-                  <p><strong>Q:</strong> {entry.question}</p>
-                  <p><strong>A:</strong> {entry.answer}</p>
-                  <p><strong>Score:</strong> {entry.score} / 10</p>
-                  <p><strong>Hallucination Check:</strong> {entry.hallucination}</p>
-                  <p><strong>Subscores:</strong> {Object.entries(entry.subscores || {}).map(
-                    ([k, v]) => `${k}: ${v.toFixed(1)} `
-                  )}</p>
-                </div>
-              ))}
+              <h4>📋 Q&A Logs</h4>
+              {session.qa.length === 0 ? (
+                <p>No Q&A logs.</p>
+              ) : (
+                session.qa.map((q, idx) => (
+                  <div key={idx} style={styles.qaItem}>
+                    <p><strong>Q:</strong> {q.question}</p>
+                    <p><strong>A:</strong> {q.answer}</p>
+                    <p><strong>Score:</strong> {q.score}</p>
+                    <p><strong>Hallucination:</strong> {q.hallucination}</p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         ))
