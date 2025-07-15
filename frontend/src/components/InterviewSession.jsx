@@ -48,7 +48,18 @@ export default function InterviewSession() {
     }, SILENCE_STAGE_1);
   }
 
+  // 🚨 New helper: flush buffered user speech before AI speaks
+  async function flushAnswer() {
+    const buf = responseBufferRef.current.trim();
+    if (!buf) return;
+    responseBufferRef.current = "";
+    await handleUserTurn(buf);
+  }
+
   async function controlSpeakAndListen(text, scheduleAfter = true) {
+    // ensure any pending user speech is sent
+    await flushAnswer();
+
     try { recRef.current.abort(); } catch {}
     isSpeakingRef.current = true;
     isPausedRef.current = true;
