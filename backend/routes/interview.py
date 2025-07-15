@@ -127,6 +127,7 @@ Follow this state-machine exactly:
 1. If the user’s message is non-empty, ask an adaptive follow-up question based on prior history, job role, and resume.
 2. If message is [EMPTY] or [SKIP], gently move on and ask another relevant question.
 Always ask one clear, professional, role-specific interview question per turn.
+Make sure to ask balanced set of behavioral and technical (including fundamental concepts based of prior history, job role, and resume) while maintaining natural conversational flow.
 Tone should be adapted based on recent behavior logs (e.g., supportive if the user appears disengaged).
 """
 
