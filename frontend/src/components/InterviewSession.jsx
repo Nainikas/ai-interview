@@ -11,8 +11,10 @@ const SHORT_ANSWER_WORDS = 5;
 const SHORT_DEBOUNCE = 800;
 const LONG_DEBOUNCE = 1500;
 
-const SILENCE_PROMPT = "It seems you’ve been quiet. Would you like me to repeat the last question?";
-const AUTO_SKIP_PROMPT = "Since I didn't hear anything, let's move on to the next question.";
+const SILENCE_PROMPT =
+  "It seems you’ve been quiet. Would you like me to repeat the last question?";
+const AUTO_SKIP_PROMPT =
+  "Since I didn't hear anything, let's move on to the next question.";
 
 export default function InterviewSession() {
   const recRef = useRef(null);
@@ -50,7 +52,9 @@ export default function InterviewSession() {
   }
 
   async function controlSpeakAndListen(text, scheduleAfter = true) {
-    try { recRef.current.abort(); } catch {}
+    try {
+      recRef.current.abort();
+    } catch {}
     isSpeakingRef.current = true;
     isPausedRef.current = true;
     clearSilenceTimers();
@@ -61,7 +65,9 @@ export default function InterviewSession() {
 
     isSpeakingRef.current = false;
     if (isPausedRef.current) {
-      try { recRef.current.start(); } catch {}
+      try {
+        recRef.current.start();
+      } catch {}
     }
 
     if (scheduleAfter) {
@@ -152,7 +158,8 @@ export default function InterviewSession() {
 
     rec.onresult = (evt) => {
       if (isSpeakingRef.current) return;
-      let final = "", interim = "";
+      let final = "",
+        interim = "";
       for (let i = evt.resultIndex; i < evt.results.length; i++) {
         const r = evt.results[i];
         if (r.isFinal) final += r[0].transcript;
@@ -186,14 +193,18 @@ export default function InterviewSession() {
 
     rec.onend = () => {
       if (!isSpeakingRef.current && !isPausedRef.current) {
-        try { rec.start(); } catch {}
+        try {
+          rec.start();
+        } catch {}
       }
     };
 
     recRef.current = rec;
     window.addEventListener("beforeunload", stopSession);
     return () => {
-      try { rec.abort(); } catch {}
+      try {
+        rec.abort();
+      } catch {}
       window.removeEventListener("beforeunload", stopSession);
       clearSilenceTimers();
       clearTimeout(sessionTimer.current);
@@ -206,7 +217,9 @@ export default function InterviewSession() {
     candidateIdRef.current = uuidv4();
 
     if (audioCtx.state === "suspended") await audioCtx.resume();
-    try { recRef.current.start(); } catch {}
+    try {
+      recRef.current.start();
+    } catch {}
 
     sessionTimer.current = setTimeout(() => {
       stopSession();
@@ -216,26 +229,34 @@ export default function InterviewSession() {
     await fetchNext();
   };
 
-  // ─── Modified handleBehavior ─────────────────────────────────────
-  const handleBehavior = async (landmarks, rawEmotion) => {
+  // ─── Modified handleBehavior with defaults ────────────────────
+  const handleBehavior = async (
+    landmarks,
+    rawEmotion = "neutral",
+    rawGaze = "center"
+  ) => {
     if (!candidateIdRef.current) return;
 
     const emotionMap = {
       smiling: "happy",
     };
-    const emotion = emotionMap[rawEmotion] || rawEmotion;
-    const face_present = Array.isArray(landmarks) && landmarks.length > 0;
 
-    await api.post("/interview/log-behavior", {
-      session_id: candidateIdRef.current,
-      emotion,
-      face_present,
-      gaze_direction: "center",  // default or computed
-    }).catch((err) => {
-      console.warn("⚠️ Behavior log failed:", err);
-    });
+    const emotion = emotionMap[rawEmotion] ?? rawEmotion ?? "neutral";
+    const face_present = Array.isArray(landmarks) && landmarks.length > 0;
+    const gaze_direction = rawGaze ?? "center";
+
+    await api
+      .post("/interview/log-behavior", {
+        session_id: candidateIdRef.current,
+        emotion,
+        face_present,
+        gaze_direction,
+      })
+      .catch((err) => {
+        console.warn("⚠️ Behavior log failed:", err);
+      });
   };
-  // ────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────
 
   const { videoRef, canvasRef } = useMediaPipeFaceMesh(handleBehavior);
 
