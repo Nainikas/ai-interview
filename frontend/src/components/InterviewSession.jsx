@@ -173,6 +173,8 @@ export default function InterviewSession() {
     if (/\b(move on|skip|next question|continue)\b/i.test(utter)) {
       return handleUserTurn("[SKIP]");
     }
+    // clear after sending so it doesn't resend
+    lastFinalRef.current = "";
     return handleUserTurn(utter);
   }
 
@@ -205,35 +207,30 @@ export default function InterviewSession() {
 
     rec.onresult = (evt) => {
       if (isSpeakingRef.current || !capturingRef.current) return;
-      let finalText = "";
-      // collect only final transcripts
+      let final = "", interim = "";
       for (let i = evt.resultIndex; i < evt.results.length; i++) {
         const r = evt.results[i];
-        if (r.isFinal) {
-          finalText += r[0].transcript;
-        }
-      }
-      if (!finalText) {
-        // you can still log or display interim if you want:
-        const interimText = Array.from(evt.results)
-          .slice(evt.resultIndex)
-          .filter(r => !r.isFinal)
-          .map(r => r[0].transcript)
-          .join("");
-        console.log("[ASR] Interim:", interimText);
-        return;
+        if (r.isFinal) final += r[0].transcript;
+        else interim += r[0].transcript;
       }
 
-      // Append only the final text
-      const cleaned = dedupeAnswer(finalText.trim());
-      responseBufferRef.current += cleaned + " ";
-      lastFinalRef.current = responseBufferRef.current.trim();
-      hasHeardRef.current = true;
-      console.log("[ASR] Final:", finalText);
-
-      clearTimeout(rec.finalizeTimer);
-      const delay = isComplete(finalText) ? 1200 : 3000;
-      rec.finalizeTimer = setTimeout(onFinalize, delay);
+      if (final) {
+        // only set lastFinalRef from true final transcripts
+        const cleaned = dedupeAnswer(final.trim());
+        lastFinalRef.current = cleaned;
+        hasHeardRef.current = true;
+        console.log("[ASR] Final:", final);
+        clearTimeout(rec.finalizeTimer);
+        const delay = isComplete(final) ? 1200 : 3000;
+        rec.finalizeTimer = setTimeout(onFinalize, delay);
+      } else if (interim) {
+        // reset silence timers on interim to avoid false quiet detection
+        hasHeardRef.current = true;
+        clearSilenceTimers();
+        scheduleSilence();
+        console.log("[ASR] Interim:", interim);
+      }
+      // else nothing to do
     };
 
     rec.onerror = (e) => {
