@@ -16,6 +16,21 @@ client = OpenAI()
 
 router = APIRouter()
 
+# ─── New: Start Session (for voice-only flow) ──────────────────
+@router.post("/start-session")
+async def start_session():
+    session_id = str(uuid4())
+    await database.execute(
+        interview_sessions.insert().values(
+            id=session_id,
+            created_at=datetime.utcnow(),
+            candidate_name=None,
+            job_role=None,
+            resume_file=None
+        )
+    )
+    return {"session_id": session_id}
+
 # ─── Upload Resume ─────────────────────────────────────────────
 @router.post("/upload-resume")
 async def upload_resume(file: UploadFile = File(...)):
@@ -147,7 +162,6 @@ Tone should be adapted based on recent behavior logs (e.g., supportive if the us
 
         # ─── Append Coaching Hint ──────────────────────────────
         try:
-            from coaching_trigger import get_hint
             coaching_hint = await get_hint(req.session_id)
             if coaching_hint:
                 next_q += f"\n\n💡 Hint: {coaching_hint}"
