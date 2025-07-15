@@ -1,57 +1,70 @@
 // src/components/AdminLogin.jsx
 import React, { useState } from "react";
+import api from "../api"; // your axios/fetch wrapper
 
 export default function AdminLogin({ onLogin }) {
+  const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!password) {
-      setError("Please enter a password.");
+    if (!username || !password) {
+      setError("Username and password are required.");
       return;
     }
 
     setSubmitting(true);
     setError(null);
 
-    // You can later replace this with API auth if needed
-    const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD;
+    // Build Basic auth header
+    const token = btoa(`${username}:${password}`);
+    const authHeader = `Basic ${token}`;
 
-    if (password === ADMIN_PASSWORD) {
-      onLogin();
-    } else {
-      setError("Incorrect password.");
+    try {
+      // Try hitting a protected endpoint
+      await api.get("/admin/interview-sessions", {
+        headers: { Authorization: authHeader }
+      });
+      // Success! Pass the header up so your app can use it.
+      onLogin(authHeader);
+    } catch (err) {
+      console.error("Admin login failed", err);
+      setError("Invalid credentials or no access.");
+    } finally {
+      setSubmitting(false);
     }
-
-    setSubmitting(false);
   };
 
   return (
     <div style={styles.container}>
       <form onSubmit={handleSubmit} style={styles.card}>
         <h1 style={styles.heading}>🔒 Admin Login</h1>
-        <p style={styles.subheading}>Please enter the admin password to continue.</p>
-
+        <input
+          type="text"
+          placeholder="Username"
+          value={username}
+          onChange={e => setUsername(e.target.value)}
+          style={styles.input}
+          autoFocus
+        />
         <input
           type="password"
-          placeholder="Admin Password"
+          placeholder="Password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={e => setPassword(e.target.value)}
           style={styles.input}
         />
-
         <button type="submit" style={styles.button} disabled={submitting}>
           {submitting ? "Logging in…" : "Login"}
         </button>
-
         {error && <p style={styles.error}>{error}</p>}
       </form>
     </div>
   );
 }
+
 
 const styles = {
   container: {
