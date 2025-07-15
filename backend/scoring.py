@@ -35,13 +35,13 @@ Answer:
 {answer}
 
 Respond ONLY in this JSON format:
-{
-  "relevance": float (0-1),
-  "accuracy": float (0-1),
-  "completeness": float (0-1),
-  "clarity": float (0-1),
-  "hallucination": "Valid" | "Speculative" | "Hallucination"
-}
+{{  
+  "relevance": float (0-1),  
+  "accuracy": float (0-1),  
+  "completeness": float (0-1),  
+  "clarity": float (0-1),  
+  "hallucination": "Valid" | "Speculative" | "Hallucination"  
+}}
 
 Hallucination Guidelines:
 - "Valid": Answer is plausible and either supported or not contradicted by resume.
@@ -74,7 +74,7 @@ async def score_answer(question: str, answer: str, resume: str = "") -> Dict:
             "hallucination": hallucination
         }
     except Exception as e:
-        logger.exception("Scoring failed:", e)
+        logger.exception("Scoring failed: %s", e)
         return {
             "score": 0.5,
             "subscores": {},
