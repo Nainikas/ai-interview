@@ -113,7 +113,7 @@ export default function InterviewSession() {
 
   async function handleUserTurn(content) {
     historyRef.current.push({ role: "user", content });
-    responseBufferRef.current = "";  // clear the buffer for the next answer
+    responseBufferRef.current = ""; // clear the buffer for the next answer
     await fetchNext(content);
   }
 
@@ -141,7 +141,7 @@ export default function InterviewSession() {
     } catch (e) {
       console.warn("fetchNext failed:", e);
       await controlSpeakAndListen(
-        "Sorry, I had trouble fetching the next question—let’s try again shortly.",
+        "Sorry, I had trouble fetching the next question—let's try again shortly.",
         false
       );
     } finally {
@@ -156,32 +156,47 @@ export default function InterviewSession() {
     return text.slice(prev + 1, qIdx + 1).trim();
   }
 
-  async function onFinalize() {
-    if (isSpeakingRef.current) return;
-    capturingRef.current = false;
-    clearTimeout(speechEndTimerRef.current);
-    const utter = lastFinalRef.current.trim();
-    clearSilenceTimers();
-
-    const lastTTS = lastSpokenTextRef.current.trim().toLowerCase();
-    if (utter.toLowerCase() === lastTTS) {
-      console.log("[ASR] Detected echo of last AI prompt. Ignoring.");
-      return;
-    }
-
-    if (!utter) return handleUserTurn("[EMPTY]");
-    if (/\b(move on|skip|next question|continue)\b/i.test(utter)) {
-      return handleUserTurn("[SKIP]");
-    }
-    return handleUserTurn(utter);
-  }
-
   // ✅ Semantic completeness check
   function isComplete(utter) {
     const wordCount = utter.trim().split(/\s+/).length;
     const endsWithPunctuation = /[a-zA-Z0-9][\.\?!'"”)]?$/.test(utter.trim());
     return wordCount > 6 && endsWithPunctuation;
   }
+
+  // ─── UPDATED onFinalize() ───────────────────────────────────────────────────
+  async function onFinalize() {
+    if (isSpeakingRef.current) return;
+    capturingRef.current = false;
+    clearTimeout(speechEndTimerRef.current);
+
+    // grab and clear the buffer
+    const raw = responseBufferRef.current.trim();
+    responseBufferRef.current = "";
+
+    // de-duplicate consecutive words
+    const cleaned = dedupeAnswer(raw);
+
+    // nothing meaningful? send an [EMPTY] flag
+    if (!cleaned) {
+      return handleUserTurn("[EMPTY]");
+    }
+
+    // ignore echo of our last TTS
+    const lastTTS = lastSpokenTextRef.current.trim().toLowerCase();
+    if (cleaned.toLowerCase() === lastTTS) {
+      console.log("[ASR] Detected echo of last AI prompt. Ignoring.");
+      return;
+    }
+
+    // skip intent
+    if (/\b(move on|skip|next question|continue)\b/i.test(cleaned)) {
+      return handleUserTurn("[SKIP]");
+    }
+
+    // finally send the clean, de-duplicated user answer
+    return handleUserTurn(cleaned);
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (initedRef.current) return;
@@ -211,18 +226,21 @@ export default function InterviewSession() {
         if (r.isFinal) final += r[0].transcript;
         else interim += r[0].transcript;
       }
-      if (!final) return;
+      if (!final && !interim) return;
 
-      // only append true finals, ignore interim
-      const chunk = final.trim();
+      const chunk = (final || interim).trim();
       responseBufferRef.current += chunk + " ";
       lastFinalRef.current = responseBufferRef.current.trim();
       hasHeardRef.current = true;
 
-      console.log("[ASR] Final:", final);
-      clearTimeout(rec.finalizeTimer);
-      const delay = isComplete(final) ? 1200 : 3000;
-      rec.finalizeTimer = setTimeout(onFinalize, delay);
+      if (final) {
+        console.log("[ASR] Final:", final);
+        clearTimeout(rec.finalizeTimer);
+        const delay = isComplete(final) ? 1200 : 3000;
+        rec.finalizeTimer = setTimeout(onFinalize, delay);
+      } else {
+        console.log("[ASR] Interim:", interim);
+      }
     };
 
     rec.onerror = (e) => {
