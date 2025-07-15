@@ -2,43 +2,33 @@
 import React, { useEffect, useState } from "react";
 import api from "../api";
 
-export default function AdminDashboard({ authHeader, onLogout }) {
+export default function AdminDashboard({ onLogout }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Debug: show us in the console what header we're actually using
-  console.debug("[AdminDashboard] authHeader:", authHeader);
+  // Debug: verify that Axios has our Authorization header set
+  console.debug(
+    "[AdminDashboard] Axios Authorization:",
+    api.defaults.headers.common["Authorization"]
+  );
 
   useEffect(() => {
-    if (!authHeader) {
-      // No auth → bounce back to login
-      onLogout();
-      return;
-    }
     loadAll();
-  }, [authHeader]);
+  }, []);
 
   async function loadAll() {
     try {
       // 1) Fetch sessions
-      const sessRes = await api.get("/admin/interview-sessions", {
-        headers: { Authorization: authHeader }
-      });
+      const sessRes = await api.get("/admin/interview-sessions");
       const sessionsData = sessRes.data.sessions;
 
-      // 2) Fetch QA & behavior for each session
+      // 2) For each session, fetch QA and behavior in parallel
       const enriched = await Promise.all(
         sessionsData.map(async (s) => {
           const [qaRes, behRes] = await Promise.all([
-            api.get("/admin/qa-log", {
-              headers: { Authorization: authHeader },
-              params: { candidate_id: s.id }
-            }),
-            api.get("/admin/behavior-logs", {
-              headers: { Authorization: authHeader },
-              params: { candidate_id: s.id }
-            })
+            api.get("/admin/qa-log", { params: { candidate_id: s.id } }),
+            api.get("/admin/behavior-logs", { params: { candidate_id: s.id } })
           ]);
           return {
             ...s,
@@ -47,10 +37,16 @@ export default function AdminDashboard({ authHeader, onLogout }) {
           };
         })
       );
+
       setSessions(enriched);
     } catch (err) {
       console.error("[AdminDashboard] loading error", err);
-      setError("Failed to load admin data. Please check your credentials.");
+      if (err.response?.status === 401) {
+        setError("Unauthorized – please log in again.");
+        onLogout();
+      } else {
+        setError("Failed to load admin data.");
+      }
     } finally {
       setLoading(false);
     }
@@ -108,10 +104,36 @@ export default function AdminDashboard({ authHeader, onLogout }) {
 }
 
 const styles = {
-  container: { padding: "2rem", background: "#f5f5f5", minHeight: "100vh" },
-  title: { fontSize: "2rem", marginBottom: "1.5rem" },
-  card: { background: "#fff", borderRadius: 10, boxShadow: "0 6px 18px rgba(0,0,0,0.1)", padding: "1.5rem 2rem", marginBottom: "2rem" },
-  behaviorBlock: { background: "#f0f8ff", padding: "1rem", borderRadius: 8, marginTop: "1rem" },
-  qaBlock: { marginTop: "1.5rem" },
-  qaItem: { background: "#f9f9f9", borderRadius: 6, padding: "1rem", marginBottom: "1rem" },
+  container: {
+    padding: "2rem",
+    fontFamily: "system-ui, sans-serif",
+    background: "#f5f5f5",
+    minHeight: "100vh",
+  },
+  title: {
+    fontSize: "2rem",
+    marginBottom: "1.5rem",
+  },
+  card: {
+    background: "#fff",
+    borderRadius: 10,
+    boxShadow: "0 6px 18px rgba(0,0,0,0.1)",
+    padding: "1.5rem 2rem",
+    marginBottom: "2rem",
+  },
+  behaviorBlock: {
+    background: "#f0f8ff",
+    padding: "1rem",
+    borderRadius: 8,
+    marginTop: "1rem",
+  },
+  qaBlock: {
+    marginTop: "1.5rem",
+  },
+  qaItem: {
+    background: "#f9f9f9",
+    borderRadius: 6,
+    padding: "1rem",
+    marginBottom: "1rem",
+  },
 };
