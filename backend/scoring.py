@@ -8,7 +8,7 @@ from collections import Counter
 import logging
 import json
 
-from db import database, behavior_logs  # ✅ Make sure db.py has these defined
+from db import database, behavior_logs  
 
 # ─── Score Weights ────────────────────────────────────────────────
 SCORE_WEIGHTS = {
@@ -21,15 +21,20 @@ SCORE_WEIGHTS = {
 llm = ChatOpenAI(model="gpt-4o", temperature=0.3)
 logger = logging.getLogger(__name__)
 
-# ─── Rubric Prompt ────────────────────────────────────────────────
+# ─── Rubric Prompt (MODIFIED to include resume context) ─────────
 rubric_prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a strict AI interviewer scoring system. Given a question and answer, score the answer on these 4 criteria (0-1 floats), and also flag hallucinations."),
+    ("system", "You are a strict but fair AI interviewer. Use the resume as context, but do NOT assume an answer is false just because it's not mentioned there. Only flag hallucinations if the answer contains clearly fabricated or implausible information."),
     ("user", """
-Question: {question}
+Resume:
+{resume}
 
-Answer: {answer}
+Question:
+{question}
 
-Respond in JSON:
+Answer:
+{answer}
+
+Respond ONLY in this JSON format:
 {
   "relevance": float (0-1),
   "accuracy": float (0-1),
@@ -37,16 +42,22 @@ Respond in JSON:
   "clarity": float (0-1),
   "hallucination": "Valid" | "Speculative" | "Hallucination"
 }
+
+Hallucination Guidelines:
+- "Valid": Answer is plausible and either supported or not contradicted by resume.
+- "Speculative": Reasonable extrapolation from the resume or generic domain knowledge.
+- "Hallucination": Clearly invented or factually incorrect detail.
 """)
 ])
 scoring_chain = LLMChain(llm=llm, prompt=rubric_prompt)
 
-# ─── Main Scoring Function ────────────────────────────────────────
-async def score_answer(question: str, answer: str) -> Dict:
+# ─── Main Scoring Function ( Accepts resume input) ───────────────
+async def score_answer(question: str, answer: str, resume: str = "") -> Dict:
     try:
         result = await scoring_chain.arun({
             "question": question,
-            "answer": answer
+            "answer": answer,
+            "resume": resume or "No resume provided."
         })
         parsed = json.loads(result)
         subscores = {
