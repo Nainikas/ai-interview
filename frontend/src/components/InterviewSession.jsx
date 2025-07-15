@@ -23,6 +23,8 @@ export default function InterviewSession() {
   const lastSpokenTextRef = useRef("");
   const hasHeardRef = useRef(false);
   const responseBufferRef = useRef("");
+  const capturingRef = useRef(false);
+  const speechEndTimerRef = useRef(null);
   const sessionTimer = useRef(null);
   const silenceTimers = useRef({ prompt: null, skip: null });
   const candidateIdRef = useRef(null);
@@ -77,9 +79,11 @@ export default function InterviewSession() {
       try { recRef.current.start(); } catch {}
     }
 
+    // start buffering user speech now
+    capturingRef.current = true;
+    hasHeardRef.current = false;
+
     if (scheduleAfter) {
-      hasHeardRef.current = false;
-      isPausedRef.current = false;
       scheduleSilence();
     }
   }
@@ -141,6 +145,8 @@ export default function InterviewSession() {
 
   async function onFinalize() {
     if (isSpeakingRef.current) return;
+    capturingRef.current = false;
+    clearTimeout(speechEndTimerRef.current);
     const utter = lastFinalRef.current.trim();
     clearSilenceTimers();
 
@@ -176,14 +182,16 @@ export default function InterviewSession() {
     rec.continuous = true;
     rec.interimResults = true;
 
-    // 🎯 Immediately finalize after the engine detects end of speech
+    // 🎯 Debounced onspeechend: only if we’re capturing, 1s delay
     rec.onspeechend = () => {
+      if (!capturingRef.current) return;
       clearTimeout(rec.finalizeTimer);
-      onFinalize();
+      clearTimeout(speechEndTimerRef.current);
+      speechEndTimerRef.current = setTimeout(onFinalize, 1000);
     };
 
     rec.onresult = (evt) => {
-      if (isSpeakingRef.current) return;
+      if (isSpeakingRef.current || !capturingRef.current) return;
       let final = "", interim = "";
       for (let i = evt.resultIndex; i < evt.results.length; i++) {
         const r = evt.results[i];
@@ -192,18 +200,17 @@ export default function InterviewSession() {
       }
       if (!final && !interim) return;
 
+      const chunk = (final || interim).trim();
+      responseBufferRef.current += chunk + " ";
+      lastFinalRef.current = responseBufferRef.current.trim();
+      hasHeardRef.current = true;
+
       if (final) {
-        // append to buffer and update lastFinal
-        responseBufferRef.current += final.trim() + " ";
-        lastFinalRef.current = responseBufferRef.current.trim();
-        hasHeardRef.current = true;
         console.log("[ASR] Final:", final);
         clearTimeout(rec.finalizeTimer);
         const delay = isComplete(final) ? 1200 : 3000;
         rec.finalizeTimer = setTimeout(onFinalize, delay);
       } else {
-        lastFinalRef.current = interim.trim();
-        hasHeardRef.current = true;
         console.log("[ASR] Interim:", interim);
       }
     };
@@ -227,6 +234,7 @@ export default function InterviewSession() {
       window.removeEventListener("beforeunload", stopSession);
       clearSilenceTimers();
       clearTimeout(sessionTimer.current);
+      clearTimeout(speechEndTimerRef.current);
     };
   }, []);
 
