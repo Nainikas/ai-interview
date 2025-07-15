@@ -7,45 +7,31 @@ import ResumeUpload from "./components/ResumeUpload";
 
 export default function App() {
   const [view, setView] = useState("interview"); // "interview" | "admin-login" | "admin"
-  const [adminLoggedIn, setAdminLoggedIn] = useState(false);
-  const [candidateId, setCandidateId] = useState(null); // from resume upload
+  const [adminAuth, setAdminAuth] = useState(null); // Basic auth header string
+  const [candidateId, setCandidateId] = useState(null);
 
-  function handleAdminLogin() {
-    setAdminLoggedIn(true);
+  // invoked by AdminLogin with authHeader
+  function handleAdminLogin(authHeader) {
+    setAdminAuth(authHeader);
     setView("admin");
   }
 
   function handleLogout() {
-    setAdminLoggedIn(false);
+    setAdminAuth(null);
     setView("interview");
     setCandidateId(null);
   }
 
-  const adminControls = view !== "admin-login" && (
-    <div style={{
-      position: "absolute", top: 20, right: 30, zIndex: 100
-    }}>
+  const adminControls = (
+    <div style={{ position: "absolute", top: 20, right: 30, zIndex: 100 }}>
       <button
-        style={{
-          padding: "10px 20px", fontWeight: 600,
-          borderRadius: 6, border: "1px solid #ccc",
-          background: "#222", color: "#fff",
-          cursor: "pointer"
-        }}
-        onClick={() => setView(adminLoggedIn ? "admin" : "admin-login")}
+        style={styles.button}
+        onClick={() => setView(adminAuth ? "admin" : "admin-login")}
       >
-        {adminLoggedIn ? "Admin Dashboard" : "Admin Login"}
+        {adminAuth ? "Admin Dashboard" : "Admin Login"}
       </button>
-      {adminLoggedIn && (
-        <button
-          style={{
-            marginLeft: 12, padding: "10px 16px",
-            borderRadius: 6, border: "1px solid #ccc",
-            background: "#aaa", color: "#222",
-            cursor: "pointer"
-          }}
-          onClick={handleLogout}
-        >
+      {adminAuth && (
+        <button style={styles.logoutButton} onClick={handleLogout}>
           Logout
         </button>
       )}
@@ -56,9 +42,8 @@ export default function App() {
     <div>
       {adminControls}
 
-      {/* 1) Upload → 2) Interview → 3) Admin */}
       {view === "interview" && !candidateId && (
-        <ResumeUpload onUploaded={(id) => setCandidateId(id)} />
+        <ResumeUpload onUploaded={id => setCandidateId(id)} />
       )}
 
       {view === "interview" && candidateId && (
@@ -69,9 +54,31 @@ export default function App() {
         <AdminLogin onLogin={handleAdminLogin} />
       )}
 
-      {view === "admin" && adminLoggedIn && (
-        <AdminDashboard />
+      {view === "admin" && adminAuth && (
+        // Pass auth header down so AdminDashboard can use it
+        <AdminDashboard authHeader={adminAuth} />
       )}
     </div>
   );
 }
+
+const styles = {
+  button: {
+    padding: "10px 20px",
+    fontWeight: 600,
+    borderRadius: 6,
+    border: "1px solid #ccc",
+    background: "#222",
+    color: "#fff",
+    cursor: "pointer",
+    marginRight: 8,
+  },
+  logoutButton: {
+    padding: "10px 16px",
+    borderRadius: 6,
+    border: "1px solid #ccc",
+    background: "#aaa",
+    color: "#222",
+    cursor: "pointer",
+  }
+};
