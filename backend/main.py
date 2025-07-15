@@ -1,193 +1,78 @@
+# backend/main.py
+
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
-import traceback
-from uuid import uuid4
-from datetime import datetime
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from pydantic import BaseModel
-from db import database, interview_logs, interview_sessions
-from rag import ingest_resume, get_retriever
-from scoring import score_answer
-from tone import compute_tone
-from coaching_trigger import get_hint
+import logging
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-import requests
-from openai import OpenAI
-client = OpenAI()
+# ─── Routers ─────────────────────────────────────────────────────
+from db import database
+from routes.admin import router as admin_router
+from routes.interview import router as interview_router
+from routes.log_behavior import router as behavior_router
+from routes.speak import router as speak_router
+from routes.clarify_check import router as clarify_router
 
-router = APIRouter()
+# ─── Logger Setup ───────────────────────────────────────────────
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# ─── New: Start Session (for voice-only flow) ──────────────────
-@router.post("/start-session")
-async def start_session():
-    session_id = str(uuid4())
-    await database.execute(
-        interview_sessions.insert().values(
-            id=session_id,
-            created_at=datetime.utcnow(),
-            candidate_name=None,
-            job_role=None,
-            resume_file=None
-        )
-    )
-    return {"session_id": session_id}
+# ─── FastAPI App ────────────────────────────────────────────────
+app = FastAPI(
+    title="AI Interview Agent",
+    description="A personalized AI-powered voice interview backend with resume ingestion, scoring, behavioral analysis, and hallucination detection.",
+    version="1.0.0"
+)
 
-# ─── Upload Resume ─────────────────────────────────────────────
-@router.post("/upload-resume")
-async def upload_resume(file: UploadFile = File(...)):
-    ext = file.filename.split(".")[-1].lower()
-    if ext != "pdf":
-        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+# ─── CORS Config ────────────────────────────────────────────────
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip('/')
 
-    candidate_id = str(uuid4())
-    temp_path = f"./temp_resume_{candidate_id}.pdf"
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        frontend_url,
+        f"{frontend_url}/"
+    ],
+    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+# ─── Global Request Logger ──────────────────────────────────────
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.info(f"➡️ {request.method} {request.url}")
     try:
-        contents = await file.read()
-        with open(temp_path, "wb") as f:
-            f.write(contents)
-
-        print(f"📄 Saved uploaded resume: {temp_path}")
-        print(f"📄 Ingesting for candidate_id: {candidate_id}")
-
-        chunks = await ingest_resume(temp_path, "application/pdf", candidate_id)
-
-        await database.execute(
-            interview_sessions.insert().values(
-                id=candidate_id,
-                created_at=datetime.utcnow(),
-                candidate_name="Candidate",
-                job_role=None,
-                resume_file=file.filename
-            )
-        )
-
-        print(f"✅ Resume ingested: {chunks} chunks")
-        return {"status": "ok", "chunks_indexed": chunks, "candidate_id": candidate_id}
-
+        response = await call_next(request)
+        return response
     except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Resume ingestion failed: {str(e)}")
+        logger.exception(f"❌ Error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
-    finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+# ─── Router Registration ────────────────────────────────────────
+app.include_router(interview_router, prefix="/interview", tags=["Interview Flow"])
+app.include_router(behavior_router, prefix="/interview", tags=["Behavior Logs"])
+app.include_router(admin_router, tags=["Admin Dashboard"])
+app.include_router(speak_router, tags=["TTS"])
+app.include_router(clarify_router, tags=["Clarify Check"])
 
-# ─── Ask Endpoint ──────────────────────────────────────────────
-class AskRequest(BaseModel):
-    user_input: str
-    history: list
-    candidate_id: str
-    session_id: str
+# ─── Health Check ───────────────────────────────────────────────
+@app.get("/", tags=["Health"])
+def health_check():
+    return {"status": "backend is running"}
 
-@router.post("/ask")
-async def ask(req: AskRequest):
-    try:
-        real_answers = [m for m in req.history if m["role"] == "user" and m["content"] not in ("[EMPTY]", "[SKIP]")]
+# ─── Startup / Shutdown Events ──────────────────────────────────
+@app.on_event("startup")
+async def startup():
+    logger.info("🚀 Connecting to database...")
+    await database.connect()
 
-        if len(real_answers) == 0:
-            return {"answer": "Hello! Which role are you applying for today?", "score": None}
-        if len(real_answers) == 1:
-            return {"answer": "Please give me a brief introduction of your previous work experience, education, and key skills.", "score": None}
-
-        prev_q = req.history[-1]["content"]
-
-        # ─── Clarify / Teach Check ───────────────────────────────
-        try:
-            clarify_url = os.getenv("CLARIFY_CHECK_URL", f"{os.getenv('BACKEND_URL', 'http://localhost:8000')}/clarify-check")
-            response = requests.post(clarify_url, json={
-                "user_input": req.user_input,
-                "question": prev_q
-            }, timeout=10)
-            clarify_type = response.json().get("type", "other")
-        except Exception as e:
-            print("⚠️ Clarify check failed:", e)
-            clarify_type = "other"
-
-        if clarify_type == "teach":
-            return {
-                "answer": "I'm here to evaluate your understanding, so I can’t explain the answer. Please try your best.",
-                "score": None
-            }
-
-        if clarify_type == "clarify":
-            return {
-                "answer": f"Sure! Here's a simpler version of the question:\n\n{prev_q}",
-                "score": None
-            }
-
-        # ─── Prepare LLM Prompt ─────────────────────────────────
-        SYSTEM_PROMPT = """
-You are a professional, supportive AI interview agent.
-On each turn you will receive exactly one of:
-  • The candidate’s spoken text  
-  • The token [EMPTY] if they said nothing for 10 s  
-  • The token [SKIP] if they explicitly asked to skip  
-
-Follow this state-machine exactly:
-1. If the user’s message is non-empty, ask an adaptive follow-up question based on prior history, job role, and resume.
-2. If message is [EMPTY] or [SKIP], gently move on and ask another relevant question.
-Always ask one clear, professional, role-specific interview question per turn.
-Make sure to ask balanced set of behavioral and technical (including fundamental concepts based of prior history, job role, and resume) while maintaining natural conversational flow.
-Tone should be adapted based on recent behavior logs (e.g., supportive if the user appears disengaged).
-"""
-
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        for m in req.history:
-            messages.append({"role": m["role"], "content": m["content"]})
-        messages.append({"role": "user", "content": req.user_input})
-
-        # ─── Inject Resume Context ──────────────────────────────
-        try:
-            retriever = get_retriever(candidate_id=req.candidate_id)
-            docs = retriever.get_relevant_documents(req.user_input)
-            context = "\n".join(d.page_content for d in docs)
-        except Exception as e:
-            print(f"⚠️ Vector DB retrieval failed: {e}")
-            context = ""
-        messages.insert(1, {"role": "system", "content": f"Resume context:\n{context}"})
-
-        # ─── Inject Candidate Tone ──────────────────────────────
-        try:
-            tone = await compute_tone(req.session_id)
-            messages.insert(2, {"role": "system", "content": f"The candidate seems {tone}. Adjust your tone accordingly."})
-        except:
-            pass
-
-        # ─── Query LLM ──────────────────────────────────────────
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            temperature=0.7,
-        )
-        next_q = response.choices[0].message.content
-
-        # ─── Append Coaching Hint ──────────────────────────────
-        try:
-            coaching_hint = await get_hint(req.session_id)
-            if coaching_hint:
-                next_q += f"\n\n💡 Hint: {coaching_hint}"
-        except Exception as e:
-            print("⚠️ Coaching hint error:", e)
-
-        # ─── Score Last Answer ─────────────────────────────────
-        result = await score_answer(prev_q, req.user_input)
-        await database.execute(
-            interview_logs.insert().values(
-                candidate_id=req.candidate_id,
-                question=prev_q,
-                answer=req.user_input,
-                score=result["score"],
-                subscores=result["subscores"],
-                hallucination=result["hallucination"],
-                timestamp=datetime.utcnow(),
-            )
-        )
-
-        return {
-            "answer": next_q,
-            **result
-        }
-
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(500, f"/ask failed: {e}")
+@app.on_event("shutdown")
+async def shutdown():
+    logger.info("🛑 Disconnecting database...")
+    await database.disconnect()
