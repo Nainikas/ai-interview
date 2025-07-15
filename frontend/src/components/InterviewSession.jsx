@@ -52,9 +52,7 @@ export default function InterviewSession() {
   }
 
   async function controlSpeakAndListen(text, scheduleAfter = true) {
-    try {
-      recRef.current.abort();
-    } catch {}
+    try { recRef.current.abort(); } catch {}
     isSpeakingRef.current = true;
     isPausedRef.current = true;
     clearSilenceTimers();
@@ -65,9 +63,7 @@ export default function InterviewSession() {
 
     isSpeakingRef.current = false;
     if (isPausedRef.current) {
-      try {
-        recRef.current.start();
-      } catch {}
+      try { recRef.current.start(); } catch {}
     }
 
     if (scheduleAfter) {
@@ -90,8 +86,9 @@ export default function InterviewSession() {
   async function handleUserTurn(content) {
     historyRef.current.push({ role: "user", content });
     if (content !== "[EMPTY]" && content !== "[SKIP]") {
+      // Include session_id so backend's FeedbackRequest model is satisfied
       api.post("/interview/feedback", {
-        question: lastQuestionRef.current,
+        session_id: candidateIdRef.current,
         answer: content,
       }).catch(() => {});
     }
@@ -111,7 +108,7 @@ export default function InterviewSession() {
         user_input: user_input || "[INIT]",
       });
       const answer = resp.answer;
-      if (!answer) throw new Error("Missing 'answer' field in /interview/ask response");
+      if (!answer) throw new Error("Missing 'answer' in /interview/ask response");
 
       historyRef.current.push({ role: "assistant", content: answer });
       lastQuestionRef.current = extractQuestion(answer);
@@ -119,7 +116,7 @@ export default function InterviewSession() {
     } catch (e) {
       console.warn("fetchNext failed:", e);
       await controlSpeakAndListen(
-        "Sorry, I had trouble fetching the next question—let's try again in a moment.",
+        "Sorry, I had trouble fetching the next question—let's try again shortly.",
         false
       );
     }
@@ -158,8 +155,7 @@ export default function InterviewSession() {
 
     rec.onresult = (evt) => {
       if (isSpeakingRef.current) return;
-      let final = "",
-        interim = "";
+      let final = "", interim = "";
       for (let i = evt.resultIndex; i < evt.results.length; i++) {
         const r = evt.results[i];
         if (r.isFinal) final += r[0].transcript;
@@ -169,10 +165,6 @@ export default function InterviewSession() {
 
       lastFinalRef.current = (final || interim).trim();
       hasHeardRef.current = true;
-
-      console.log("[ASR] Heard:", lastFinalRef.current);
-      console.log("[ASR] Final:", final);
-      console.log("[ASR] Interim:", interim);
 
       const wc = lastFinalRef.current.split(/\s+/).length;
       const delay = final
@@ -193,18 +185,14 @@ export default function InterviewSession() {
 
     rec.onend = () => {
       if (!isSpeakingRef.current && !isPausedRef.current) {
-        try {
-          rec.start();
-        } catch {}
+        try { rec.start(); } catch {}
       }
     };
 
     recRef.current = rec;
     window.addEventListener("beforeunload", stopSession);
     return () => {
-      try {
-        rec.abort();
-      } catch {}
+      try { rec.abort(); } catch {}
       window.removeEventListener("beforeunload", stopSession);
       clearSilenceTimers();
       clearTimeout(sessionTimer.current);
@@ -217,9 +205,7 @@ export default function InterviewSession() {
     candidateIdRef.current = uuidv4();
 
     if (audioCtx.state === "suspended") await audioCtx.resume();
-    try {
-      recRef.current.start();
-    } catch {}
+    try { recRef.current.start(); } catch {}
 
     sessionTimer.current = setTimeout(() => {
       stopSession();
@@ -229,7 +215,6 @@ export default function InterviewSession() {
     await fetchNext();
   };
 
-  // ─── Modified handleBehavior with defaults ────────────────────
   const handleBehavior = async (
     landmarks,
     rawEmotion = "neutral",
@@ -237,41 +222,33 @@ export default function InterviewSession() {
   ) => {
     if (!candidateIdRef.current) return;
 
-    const emotionMap = {
-      smiling: "happy",
-    };
-
+    const emotionMap = { smiling: "happy" };
     const emotion = emotionMap[rawEmotion] ?? rawEmotion ?? "neutral";
     const face_present = Array.isArray(landmarks) && landmarks.length > 0;
     const gaze_direction = rawGaze ?? "center";
 
-    await api
-      .post("/interview/log-behavior", {
-        session_id: candidateIdRef.current,
-        emotion,
-        face_present,
-        gaze_direction,
-      })
-      .catch((err) => {
-        console.warn("⚠️ Behavior log failed:", err);
-      });
+    await api.post("/interview/log-behavior", {
+      session_id: candidateIdRef.current,
+      emotion,
+      face_present,
+      gaze_direction,
+    }).catch((err) => {
+      console.warn("⚠️ Behavior log failed:", err);
+    });
   };
-  // ───────────────────────────────────────────────────────────────
 
   const { videoRef, canvasRef } = useMediaPipeFaceMesh(handleBehavior);
 
   return (
     <div style={{ position: "relative", width: "100vw", height: "100vh" }}>
-      <div
-        style={{
-          position: "absolute",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          textAlign: "center",
-          zIndex: 1,
-        }}
-      >
+      <div style={{
+        position: "absolute",
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -50%)",
+        textAlign: "center",
+        zIndex: 1
+      }}>
         <h1>AI Interview Agent</h1>
         <button onClick={startInterview} disabled={started}>
           {started ? "Interview in progress…" : "Start Interview"}
@@ -280,15 +257,13 @@ export default function InterviewSession() {
       </div>
 
       {started && (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(50% + 80px)",
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 0,
-          }}
-        >
+        <div style={{
+          position: "absolute",
+          top: "calc(50% + 80px)",
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 0
+        }}>
           <div className="dot dot-1" />
           <div className="dot dot-2" />
           <div className="dot dot-3" />
@@ -305,7 +280,7 @@ export default function InterviewSession() {
           height: 120,
           border: "2px solid #444",
           borderRadius: 4,
-          zIndex: 1,
+          zIndex: 1
         }}
         autoPlay
         muted
