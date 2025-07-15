@@ -19,12 +19,7 @@ export default function InterviewSession() {
   const fetchingNextRef = useRef(false);
   const historyRef = useRef([]);
   const lastQuestionRef = useRef("");
-  const lastFinalRef = useRef("");
   const lastSpokenTextRef = useRef("");
-  const hasHeardRef = useRef(false);
-  const responseBufferRef = useRef("");
-  const capturingRef = useRef(false);
-  const speechEndTimerRef = useRef(null);
   const sessionTimer = useRef(null);
   const silenceTimers = useRef({ prompt: null, skip: null });
   const candidateIdRef = useRef(null);
@@ -40,41 +35,15 @@ export default function InterviewSession() {
   function scheduleSilence() {
     clearSilenceTimers();
     silenceTimers.current.prompt = setTimeout(async () => {
-      if (hasHeardRef.current) return;
       await controlSpeakAndListen(SILENCE_PROMPT, false);
       silenceTimers.current.skip = setTimeout(async () => {
-        if (hasHeardRef.current) return;
         await controlSpeakAndListen(AUTO_SKIP_PROMPT, false);
         await handleUserTurn("[SKIP]");
       }, SILENCE_STAGE_2);
     }, SILENCE_STAGE_1);
   }
 
-  // ✂️ Helper: remove consecutive duplicate words
-  function dedupeAnswer(text) {
-    const words = text.trim().split(/\s+/);
-    const out = [];
-    for (let w of words) {
-      if (out.length === 0 || out[out.length - 1] !== w) {
-        out.push(w);
-      }
-    }
-    return out.join(" ");
-  }
-
-  // 🚨 Modified: flush buffered user speech before AI speaks
-  async function flushAnswer() {
-    const buf = responseBufferRef.current.trim();
-    if (!buf) return;
-    responseBufferRef.current = "";
-    const cleaned = dedupeAnswer(buf);
-    await handleUserTurn(cleaned);
-  }
-
   async function controlSpeakAndListen(text, scheduleAfter = true) {
-    // ensure any pending user speech is sent
-    await flushAnswer();
-
     try { recRef.current.abort(); } catch {}
     isSpeakingRef.current = true;
     isPausedRef.current = true;
@@ -91,10 +60,6 @@ export default function InterviewSession() {
     if (isPausedRef.current) {
       try { recRef.current.start(); } catch {}
     }
-
-    // start buffering user speech now
-    capturingRef.current = true;
-    hasHeardRef.current = false;
 
     if (scheduleAfter) {
       scheduleSilence();
@@ -113,7 +78,6 @@ export default function InterviewSession() {
 
   async function handleUserTurn(content) {
     historyRef.current.push({ role: "user", content });
-    responseBufferRef.current = ""; // clear the buffer for the next answer
     await fetchNext(content);
   }
 
@@ -122,12 +86,11 @@ export default function InterviewSession() {
     fetchingNextRef.current = true;
 
     clearSilenceTimers();
-    const raw = historyRef.current.slice(-10);
-    const clean = raw.map(({ role, content }) => ({ role, content }));
+    const raw = historyRef.current.slice(-10).map(({ role, content }) => ({ role, content }));
 
     try {
       const resp = await api.post("/interview/ask", {
-        history: clean,
+        history: raw,
         candidate_id: candidateIdRef.current,
         session_id: candidateIdRef.current,
         user_input: user_input || "[INIT]",
@@ -156,48 +119,6 @@ export default function InterviewSession() {
     return text.slice(prev + 1, qIdx + 1).trim();
   }
 
-  // ✅ Semantic completeness check
-  function isComplete(utter) {
-    const wordCount = utter.trim().split(/\s+/).length;
-    const endsWithPunctuation = /[a-zA-Z0-9][\.\?!'"”)]?$/.test(utter.trim());
-    return wordCount > 6 && endsWithPunctuation;
-  }
-
-  // ─── UPDATED onFinalize() ───────────────────────────────────────────────────
-  async function onFinalize() {
-    if (isSpeakingRef.current) return;
-    capturingRef.current = false;
-    clearTimeout(speechEndTimerRef.current);
-
-    // grab and clear the buffer
-    const raw = responseBufferRef.current.trim();
-    responseBufferRef.current = "";
-
-    // de-duplicate consecutive words
-    const cleaned = dedupeAnswer(raw);
-
-    // nothing meaningful? send an [EMPTY] flag
-    if (!cleaned) {
-      return handleUserTurn("[EMPTY]");
-    }
-
-    // ignore echo of our last TTS
-    const lastTTS = lastSpokenTextRef.current.trim().toLowerCase();
-    if (cleaned.toLowerCase() === lastTTS) {
-      console.log("[ASR] Detected echo of last AI prompt. Ignoring.");
-      return;
-    }
-
-    // skip intent
-    if (/\b(move on|skip|next question|continue)\b/i.test(cleaned)) {
-      return handleUserTurn("[SKIP]");
-    }
-
-    // finally send the clean, de-duplicated user answer
-    return handleUserTurn(cleaned);
-  }
-  // ─────────────────────────────────────────────────────────────────────────────
-
   useEffect(() => {
     if (initedRef.current) return;
     initedRef.current = true;
@@ -210,36 +131,15 @@ export default function InterviewSession() {
     rec.continuous = true;
     rec.interimResults = true;
 
-    // 🎯 Debounced onspeechend: only if we’re capturing, 1s delay
-    rec.onspeechend = () => {
-      if (!capturingRef.current) return;
-      clearTimeout(rec.finalizeTimer);
-      clearTimeout(speechEndTimerRef.current);
-      speechEndTimerRef.current = setTimeout(onFinalize, 1000);
-    };
-
+    // <-- ONLY FINAL RESULTS get sent, immediately -->
     rec.onresult = (evt) => {
-      if (isSpeakingRef.current || !capturingRef.current) return;
-      let final = "", interim = "";
+      if (isSpeakingRef.current) return;
       for (let i = evt.resultIndex; i < evt.results.length; i++) {
         const r = evt.results[i];
-        if (r.isFinal) final += r[0].transcript;
-        else interim += r[0].transcript;
-      }
-      if (!final && !interim) return;
-
-      const chunk = (final || interim).trim();
-      responseBufferRef.current += chunk + " ";
-      lastFinalRef.current = responseBufferRef.current.trim();
-      hasHeardRef.current = true;
-
-      if (final) {
-        console.log("[ASR] Final:", final);
-        clearTimeout(rec.finalizeTimer);
-        const delay = isComplete(final) ? 1200 : 3000;
-        rec.finalizeTimer = setTimeout(onFinalize, delay);
-      } else {
-        console.log("[ASR] Interim:", interim);
+        if (r.isFinal) {
+          const final = r[0].transcript.trim();
+          if (final) handleUserTurn(final);
+        }
       }
     };
 
@@ -262,7 +162,6 @@ export default function InterviewSession() {
       window.removeEventListener("beforeunload", stopSession);
       clearSilenceTimers();
       clearTimeout(sessionTimer.current);
-      clearTimeout(speechEndTimerRef.current);
     };
   }, []);
 
@@ -315,14 +214,16 @@ export default function InterviewSession() {
 
   return (
     <div style={{ position: "relative", width: "100vw", height: "100vh" }}>
-      <div style={{
-        position: "absolute",
-        top: "50%",
-        left: "50%",
-        transform: "translate(-50%, -50%)",
-        textAlign: "center",
-        zIndex: 1
-      }}>
+      <div
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          textAlign: "center",
+          zIndex: 1,
+        }}
+      >
         <h1>AI Interview Agent</h1>
         <button onClick={startInterview} disabled={started}>
           {started ? "Interview in progress…" : "Start Interview"}
@@ -331,13 +232,15 @@ export default function InterviewSession() {
       </div>
 
       {started && (
-        <div style={{
-          position: "absolute",
-          top: "calc(50% + 80px)",
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 0
-        }}>
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(50% + 80px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 0,
+          }}
+        >
           <div className="dot dot-1" />
           <div className="dot dot-2" />
           <div className="dot dot-3" />
@@ -354,7 +257,7 @@ export default function InterviewSession() {
           height: 120,
           border: "2px solid #444",
           borderRadius: 4,
-          zIndex: 1
+          zIndex: 1,
         }}
         autoPlay
         muted
