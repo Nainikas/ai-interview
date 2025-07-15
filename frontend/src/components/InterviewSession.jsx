@@ -102,7 +102,7 @@ export default function InterviewSession() {
         history: clean,
         candidate_id: candidateIdRef.current,
         session_id: candidateIdRef.current,
-        user_input: user_input || "[INIT]"
+        user_input: user_input || "[INIT]",
       });
       const answer = resp.answer;
       if (!answer) throw new Error("Missing 'answer' field in /interview/ask response");
@@ -216,35 +216,41 @@ export default function InterviewSession() {
     await fetchNext();
   };
 
+  // ─── Modified handleBehavior ─────────────────────────────────────
   const handleBehavior = async (landmarks, rawEmotion) => {
-  if (!candidateIdRef.current) return;
+    if (!candidateIdRef.current) return;
 
-  const emotionMap = {
-    smiling: "happy",
+    const emotionMap = {
+      smiling: "happy",
+    };
+    const emotion = emotionMap[rawEmotion] || rawEmotion;
+    const face_present = Array.isArray(landmarks) && landmarks.length > 0;
+
+    await api.post("/interview/log-behavior", {
+      session_id: candidateIdRef.current,
+      emotion,
+      face_present,
+      gaze_direction: "center",  // default or computed
+    }).catch((err) => {
+      console.warn("⚠️ Behavior log failed:", err);
+    });
   };
+  // ────────────────────────────────────────────────────────────────
 
-  const emotion = emotionMap[rawEmotion] || rawEmotion;
-  const face_present = Array.isArray(landmarks) && landmarks.length > 0;
+  const { videoRef, canvasRef } = useMediaPipeFaceMesh(handleBehavior);
 
-  await api.post("/interview/log-behavior", {
-    session_id: candidateIdRef.current,
-    emotion,
-    face_present,
-    gaze_direction: "center",
-  }).catch((err) => {
-    console.warn("⚠️ Behavior log failed:", err);
-  });
-};
-
-
-const { videoRef, canvasRef } = useMediaPipeFaceMesh(handleBehavior);
-
-return (
+  return (
     <div style={{ position: "relative", width: "100vw", height: "100vh" }}>
-      <div style={{
-        position: "absolute", top: "50%", left: "50%",
-        transform: "translate(-50%, -50%)", textAlign: "center", zIndex: 1
-      }}>
+      <div
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          textAlign: "center",
+          zIndex: 1,
+        }}
+      >
         <h1>AI Interview Agent</h1>
         <button onClick={startInterview} disabled={started}>
           {started ? "Interview in progress…" : "Start Interview"}
@@ -253,10 +259,15 @@ return (
       </div>
 
       {started && (
-        <div style={{
-          position: "absolute", top: "calc(50% + 80px)", left: "50%",
-          transform: "translateX(-50%)", zIndex: 0
-        }}>
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(50% + 80px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 0,
+          }}
+        >
           <div className="dot dot-1" />
           <div className="dot dot-2" />
           <div className="dot dot-3" />
@@ -266,11 +277,18 @@ return (
       <video
         ref={videoRef}
         style={{
-          position: "fixed", bottom: 10, right: 10,
-          width: 160, height: 120, border: "2px solid #444",
-          borderRadius: 4, zIndex: 1
+          position: "fixed",
+          bottom: 10,
+          right: 10,
+          width: 160,
+          height: 120,
+          border: "2px solid #444",
+          borderRadius: 4,
+          zIndex: 1,
         }}
-        autoPlay muted playsInline
+        autoPlay
+        muted
+        playsInline
       />
       <canvas ref={canvasRef} style={{ display: "none" }} />
     </div>
