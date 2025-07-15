@@ -4,53 +4,45 @@ import api from "../api";
 
 export default function AdminDashboard({ onLogout }) {
   const [sessions, setSessions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  // Debug: verify that Axios has our Authorization header set
-  console.debug(
-    "[AdminDashboard] Axios Authorization:",
-    api.defaults.headers.common["Authorization"]
-  );
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
 
   useEffect(() => {
-    loadAll();
-  }, []);
+    (async () => {
+      try {
+        // 1️⃣ Fetch sessions
+        const { sessions: sessionsData = [] } =
+          await api.get("/admin/interview-sessions");
 
-  async function loadAll() {
-    try {
-      // 1) Fetch sessions
-      const sessRes = await api.get("/admin/interview-sessions");
-      const sessionsData = sessRes.data.sessions;
+        // 2️⃣ Enrich each session with QA + behavior logs
+        const enriched = await Promise.all(
+          sessionsData.map(async (s) => {
+            const { qa_log = [] } = await api.get("/admin/qa-log", {
+              params: { candidate_id: s.id },
+            });
+            const { logs = [] } = await api.get("/admin/behavior-logs", {
+              params: { candidate_id: s.id },
+            });
+            return { ...s, qa: qa_log, behavior: logs };
+          })
+        );
 
-      // 2) For each session, fetch QA and behavior in parallel
-      const enriched = await Promise.all(
-        sessionsData.map(async (s) => {
-          const [qaRes, behRes] = await Promise.all([
-            api.get("/admin/qa-log", { params: { candidate_id: s.id } }),
-            api.get("/admin/behavior-logs", { params: { candidate_id: s.id } })
-          ]);
-          return {
-            ...s,
-            qa: qaRes.data.qa_log,
-            behavior: behRes.data.logs
-          };
-        })
-      );
-
-      setSessions(enriched);
-    } catch (err) {
-      console.error("[AdminDashboard] loading error", err);
-      if (err.response?.status === 401) {
-        setError("Unauthorized – please log in again.");
-        onLogout();
-      } else {
-        setError("Failed to load admin data.");
+        setSessions(enriched);
+        setError(null);
+      } catch (err) {
+        console.error("AdminDashboard loading error:", err);
+        // simple check for 401
+        if (String(err).includes("401")) {
+          setError("Unauthorized — please log in again.");
+          onLogout();
+        } else {
+          setError("Failed to load admin data.");
+        }
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }
+    })();
+  }, [onLogout]);
 
   if (loading) return <p>Loading interview sessions…</p>;
   if (error)   return <p style={{ color: "red" }}>{error}</p>;
@@ -62,41 +54,36 @@ export default function AdminDashboard({ onLogout }) {
       {sessions.map((session) => (
         <div key={session.id} style={styles.card}>
           <h3>Candidate: {session.candidate_name || session.id}</h3>
-          <p><strong>Session ID:</strong> {session.id}</p>
           <p><strong>Resume:</strong> {session.resume_file}</p>
           <p><strong>Created:</strong> {new Date(session.created_at).toLocaleString()}</p>
 
-          <div style={styles.behaviorBlock}>
+          <section style={styles.behaviorBlock}>
             <h4>🧠 Behavioral Logs</h4>
-            {session.behavior.length === 0 ? (
-              <p>No behavior logs.</p>
-            ) : (
-              <ul>
-                {session.behavior.map((b, i) => (
-                  <li key={i}>
-                    [{new Date(b.timestamp).toLocaleTimeString()}]  
-                    Emotion: {b.emotion}, Face: {b.face_present ? "Yes" : "No"}, Gaze: {b.gaze_direction}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+            {session.behavior.length === 0
+              ? <p>No behavior logs.</p>
+              : <ul>
+                  {session.behavior.map((b, i) => (
+                    <li key={i}>
+                      [{new Date(b.timestamp).toLocaleTimeString()}]  
+                      Emotion: {b.emotion}, Face: {b.face_present ? "Yes":"No"}, Gaze: {b.gaze_direction}
+                    </li>
+                  ))}
+                </ul>}
+          </section>
 
-          <div style={styles.qaBlock}>
+          <section style={styles.qaBlock}>
             <h4>📋 Q&A Logs</h4>
-            {session.qa.length === 0 ? (
-              <p>No Q&A logs.</p>
-            ) : (
-              session.qa.map((q, idx) => (
-                <div key={idx} style={styles.qaItem}>
-                  <p><strong>Q:</strong> {q.question}</p>
-                  <p><strong>A:</strong> {q.answer}</p>
-                  <p><strong>Score:</strong> {q.score}</p>
-                  <p><strong>Hallucination:</strong> {q.hallucination}</p>
-                </div>
-              ))
-            )}
-          </div>
+            {session.qa.length === 0
+              ? <p>No Q&A logs.</p>
+              : session.qa.map((q, idx) => (
+                  <div key={idx} style={styles.qaItem}>
+                    <p><strong>Q:</strong> {q.question}</p>
+                    <p><strong>A:</strong> {q.answer}</p>
+                    <p><strong>Score:</strong> {q.score}</p>
+                    <p><strong>Hallucination:</strong> {q.hallucination}</p>
+                  </div>
+                ))}
+          </section>
         </div>
       ))}
     </div>
@@ -104,36 +91,10 @@ export default function AdminDashboard({ onLogout }) {
 }
 
 const styles = {
-  container: {
-    padding: "2rem",
-    fontFamily: "system-ui, sans-serif",
-    background: "#f5f5f5",
-    minHeight: "100vh",
-  },
-  title: {
-    fontSize: "2rem",
-    marginBottom: "1.5rem",
-  },
-  card: {
-    background: "#fff",
-    borderRadius: 10,
-    boxShadow: "0 6px 18px rgba(0,0,0,0.1)",
-    padding: "1.5rem 2rem",
-    marginBottom: "2rem",
-  },
-  behaviorBlock: {
-    background: "#f0f8ff",
-    padding: "1rem",
-    borderRadius: 8,
-    marginTop: "1rem",
-  },
-  qaBlock: {
-    marginTop: "1.5rem",
-  },
-  qaItem: {
-    background: "#f9f9f9",
-    borderRadius: 6,
-    padding: "1rem",
-    marginBottom: "1rem",
-  },
+  container:     { padding: "2rem", background: "#f5f5f5", minHeight: "100vh" },
+  title:         { fontSize: "2rem", marginBottom: "1.5rem" },
+  card:          { background: "#fff", borderRadius: 10, boxShadow: "0 6px 18px rgba(0,0,0,0.1)", padding: "1.5rem 2rem", marginBottom: "2rem" },
+  behaviorBlock: { background: "#f0f8ff", padding: "1rem", borderRadius: 8, marginTop: "1rem" },
+  qaBlock:       { marginTop: "1.5rem" },
+  qaItem:        { background: "#f9f9f9", borderRadius: 6, padding: "1rem", marginBottom: "1rem" },
 };
