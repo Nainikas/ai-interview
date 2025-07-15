@@ -19,11 +19,11 @@ export default function InterviewSession() {
   const initedRef = useRef(false);
   const isSpeakingRef = useRef(false);
   const isPausedRef = useRef(false);
-  const fetchingNextRef = useRef(false); // ✅ Prevent duplicate fetchNext
+  const fetchingNextRef = useRef(false);
   const historyRef = useRef([]);
   const lastQuestionRef = useRef("");
   const lastFinalRef = useRef("");
-  const lastSpokenTextRef = useRef(""); // ✅ Store last AI spoken response
+  const lastSpokenTextRef = useRef("");
   const hasHeardRef = useRef(false);
   const sessionTimer = useRef(null);
   const silenceTimers = useRef({ prompt: null, skip: null });
@@ -56,12 +56,12 @@ export default function InterviewSession() {
     isPausedRef.current = true;
     clearSilenceTimers();
 
-    await new Promise(r => setTimeout(r, 400)); // ✅ Pause mic 400ms before TTS
+    await new Promise(r => setTimeout(r, 400)); // Pause mic 400ms before TTS
     await audioCtx.suspend();
-    lastSpokenTextRef.current = text; // ✅ Track for debounce
+    lastSpokenTextRef.current = text; // Track for debounce
     await speakText(text);
     await audioCtx.resume();
-    await new Promise(r => setTimeout(r, 500)); // ✅ Resume mic 500ms after TTS
+    await new Promise(r => setTimeout(r, 500)); // Resume mic 500ms after TTS
 
     isSpeakingRef.current = false;
     if (isPausedRef.current) {
@@ -87,13 +87,7 @@ export default function InterviewSession() {
 
   async function handleUserTurn(content) {
     historyRef.current.push({ role: "user", content });
-    if (content !== "[EMPTY]" && content !== "[SKIP]") {
-      api.post("/interview/feedback", {
-        session_id: candidateIdRef.current,
-        answer: content,
-      }).catch(() => {});
-    }
-    await fetchNext(content);
+    await fetchNext(content); // ✅ Feedback endpoint removed
   }
 
   async function fetchNext(user_input = "") {
@@ -178,7 +172,6 @@ export default function InterviewSession() {
       lastFinalRef.current = (final || interim).trim();
       hasHeardRef.current = true;
 
-      // ✅ DEBUG
       if (interim) console.log("[ASR] Interim:", interim);
       if (final) console.log("[ASR] Final:", final);
 
