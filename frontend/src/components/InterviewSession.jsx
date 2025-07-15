@@ -176,6 +176,12 @@ export default function InterviewSession() {
     rec.continuous = true;
     rec.interimResults = true;
 
+    // 🎯 Immediately finalize after the engine detects end of speech
+    rec.onspeechend = () => {
+      clearTimeout(rec.finalizeTimer);
+      onFinalize();
+    };
+
     rec.onresult = (evt) => {
       if (isSpeakingRef.current) return;
       let final = "", interim = "";
